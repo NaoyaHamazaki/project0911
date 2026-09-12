@@ -136,8 +136,9 @@ APIキーはサーバー側に置き、フロントは常に `/api/places/sugges
 ### Railway側でやること
 
 1. GitHubリポジトリ（このリポジトリ）を連携してRailwayプロジェクトを作成する
-   （リポジトリ直下の `nixpacks.toml` を自動で見つけてビルドします。ルートディレクトリの
-   指定などは不要です）
+   （リポジトリ直下の `Dockerfile` を自動で見つけてビルドします。ルートディレクトリの
+   指定などは不要です。backend/とfrontend/が並ぶモノレポ構成のため、RailwayのNixpacks/
+   Railpackという自動ビルダーには頼らず、Dockerfileで明示的にビルド手順を指定しています）
 2. Postgresプラグインを追加する（追加すると `DATABASE_URL` が自動で注入され、SQLiteから
    自動的にPostgreSQLへ切り替わります）
 3. 環境変数を設定する
@@ -151,13 +152,14 @@ APIキーはサーバー側に置き、フロントは常に `/api/places/sugges
 5. デプロイ完了後、管理ユーザーを作る場合は Railway のシェル機能などから
    `python manage.py createsuperuser` を実行する（`backend/` ディレクトリで実行すること）
 
-### ビルド・起動の流れ（`nixpacks.toml` の中身）
+### ビルド・起動の流れ（`Dockerfile` の中身）
 
-1. `pip install -r backend/requirements.txt`、`cd frontend && npm ci`
-2. `cd frontend && npm run build` → `frontend/dist` が生成される
-3. 起動時: `python manage.py migrate` → `collectstatic` → `gunicorn config.wsgi`
+1. 1段目（node:20-slim）: `frontend/` で `npm ci` → `npm run build` → `frontend/dist` が生成される
+2. 2段目（python:3.11-slim）: `backend/requirements.txt` を `pip install`、1段目の `frontend/dist` を
+   `/app/frontend/dist` にコピー（`settings.py` の `FRONTEND_DIST_DIR` が参照する場所と一致させている）
+3. 起動時（コンテナのCMD）: `python manage.py migrate` → `collectstatic` → `gunicorn config.wsgi`
 
-ローカルでこの本番構成を試したい場合:
+Dockerを使わず、Dockerfileの中でやっていることを手元で直接試したい場合:
 
 ```bash
 cd frontend && npm run build && cd ..

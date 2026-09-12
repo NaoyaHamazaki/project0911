@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+backend/db.sqlite3
+backend/staticfiles
+frontend/node_modules
+frontend/dist
+**/.env
+/README.md
+/PayPay決済実装プロンプト.txt
+/旅のしおり作成アプリ.txt
