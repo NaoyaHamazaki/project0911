@@ -1,0 +1,435 @@
+たびしおりプロンプトアプリへの PayPay 決済導入プロンプト
+============================================================
+作成日: 2026年9月12日
+参照元: https://developer.paypay.ne.jp/develop/paypay-lab ほか（末尾の参考リンク参照）
+
+■ このファイルについて
+------------------------------------------------------------
+「もし課金の仕組みを加えるとしたら」という仮の検討のために作成した、実装依頼用のプロンプト（指示書）です。
+まだ課金機能を作ると決定したわけではありません。実際に着手する際は、このファイルの内容をそのまま
+Claude Code などに渡して実装を進められるように書いています。
+
+未確定の論点（■ 0. 前提として先に決めること）が残っているので、実装に入る前にそこだけ先に固めてください。
+
+
+■ 0. 前提として先に決めること（要相談・未決定）
+------------------------------------------------------------
+1. 【決定】課金対象 = しおり画像生成オプション。テキストのプロンプト出力は今まで通り無料のまま、
+   「画像も生成する」を選んだ場合のみ 110円（税込想定）を課金する。
+   → ただし画像生成機能自体がまだ未実装（README「今後の追加候補」参照）。
+     PayPay導入の前に、まず画像生成機能そのものを作る必要がある。
+   → 【未決定・要検討】どの画像生成方式にするかは■1-1bで比較検討中。
+     無料のGemini/ChatGPTと差別化するため、単純なAPI1本呼び出しではなく
+     Ideogram/Recraft、またはHTMLテンプレート合成方式（■1-1b後半）が
+     有力候補。将来的に複数方式を切り替え・併用できるよう、住所サジェストと
+     同じプロバイダ層で実装する（■1-2参照）。
+   → 110円という価格が採算に乗るかは、実際に使う画像生成方式の単価と
+     PayPayの決済手数料しだいなので、■1-1・■1-1b の試算を先に確認すること。
+2. 金額・通貨: 110円/ 回、JPY固定（PayPayはJPYのみ対応）
+3. 返金ポリシー（生成に失敗した場合の自動返金など）※要検討
+4. 特定商取引法に基づく表記ページの要否（対価を得るなら日本では原則必須）※要検討
+5. 資金決済法・前払式支払手段等の該当性（顧問弁護士 or 詳しい人に確認したいところ）※要検討
+6. PayPayのビジネスアカウント契約・加盟店審査をいつ・誰が申し込むか
+   （個人事業主/法人の実在確認、銀行口座、審査に数日〜要する想定）※要検討
+
+→ 3〜6が固まるまでは、下記の技術実装だけ先行してサンドボックス環境で作っておくことは可能。
+
+
+■ 1. 技術方式の選定理由
+------------------------------------------------------------
+- 国内シェアの大きいQRコード決済として PayPay を採用する。
+- 実装方式は PayPay の「Web Payment（オンライン決済 / Dynamic QRコード決済）」を使う。
+  ユーザーはブラウザ上で支払いを開始し、PayPayアプリでQRコードを読み取る、または
+  スマホ内であればPayPayアプリを直接起動して決済する（App Invoke）。
+- 公式SDKが Python 用に提供されている（`paypayopa`）ため、本アプリの Django バックエンドと
+  相性がよく、追加インフラなしで導入できる。
+
+
+■ 1-1. 110円の採算試算（まずGoogle系で試算・他社比較は■1-1b参照）
+------------------------------------------------------------
+どのAPIを採用するかは■1-1bで比較検討中（未決定）。ここでは最も安価な
+Google Imagen系を使った場合の下限側の試算を先に置いておく
+（他社APIを使う場合の単価は■1-1bの比較表を参照）。
+将来的に他社API（Ideogram/Recraft/OpenAI等）へ切り替え・使い分けできるよう、
+住所サジェストの providers.py と同じ「プロバイダ層」で実装する（■1-2参照）。
+
+以下はWeb検索で確認した2026年9月時点の非公式まとめサイトの情報（$は米ドル）。
+実装直前に https://ai.google.dev/pricing の公式ページで必ず最新価格を確認すること。
+
+  モデル                          目安単価(1枚)      円換算(参考: 150円/$)
+  ------------------------------  -----------------  ---------------------
+  Imagen 4 Fast（最安）           $0.02              約3円
+  Imagen 4 標準                   $0.04前後          約6円
+  Gemini 2.5 Flash Image          $0.039前後         約6円
+  Imagen 4 Ultra（高画質）        $0.12前後          約18円
+  Gemini 3 Pro Image(Nano Banana Pro) $0.13〜$0.24   約20〜36円
+  ※ Batch API利用でさらに-50%になるプランもあるが、リアルタイム生成には使えない想定
+
+試算（Imagen 4 Fast、約3円/枚を採用した場合）:
+  売上（税込110円）
+  − 画像生成API原価（目安 約3〜6円/枚）
+  − PayPay加盟店手数料（契約プラン次第。仮に3%とすると約3.3円）
+  − インフラ費（無視できる水準）
+  ≒ 1回あたり 100円前後の粗利（Imagen 4 Fast採用時の目安）
+
+  ※ 高画質モデル（Nano Banana Pro等）を使うと原価だけで20〜36円になり、
+    手数料と合わせても粗利は残るが、Fast系より利幅は薄くなる。
+    「まずは安価なFast/標準モデルで開始し、必要なら画質オプションを別価格で
+    上位提供する」という段階的な設計が現実的。
+
+→ 上記はあくまで非公式情報からの試算。実装直前に公式最新価格で再計算すること。
+
+
+■ 1-1b. 【重要】無料のGemini/ChatGPTとの差別化について（2026年9月 追加検討）
+------------------------------------------------------------
+指摘の通り、「プロンプトを組み立てて渡す」だけでは、Gemini/ChatGPTを無料枠で
+使っているユーザーにとって「コピペの手間が省ける」以上の価値がない。
+110円払ってでも欲しいと思わせるには、無料ではやりにくいことを提供する必要がある。
+
+旅のしおり画像は「デザイン性」に加えて「日程・住所・時刻などの正確なテキスト」を
+画像内に含める必要があるが、これは汎用の画像生成AI全般が苦手とする領域
+（文字が崩れる・桁が変わる・存在しないスケジュールを幻覚するなど）。
+無料のGemini/ChatGPTアプリで試しても、まさにこの「文字精度」でガッカリされやすい。
+→ 逆に言えば、ここで無料ツールより明確に良い結果を出せれば、課金の説得力になる。
+
+比較調査した画像生成API（2026年9月時点、非公式まとめサイト情報。要最新確認）:
+
+  サービス            強み                              弱み                      単価目安(1枚)        商用利用
+  ------------------  --------------------------------  ------------------------  --------------------  --------
+  Imagen 4 (Google)   安価、Google純正、Fast/Ultra選択可 文字精度は次点            $0.02〜0.12           可
+  Ideogram V4         ★文字入り画像の精度が最も高い     単価はImagenよりやや高め  $0.03(Turbo)〜0.10    可(※)
+  Recraft V4          ベクター(SVG)出力、フラット/ポップ 写実表現には不向き        $0.035(通常)          可
+                       調に強い。拡大しても劣化せず印刷
+                       向き（A4出力サイズと相性が良い）
+  FLUX.2 Pro (BFL)     現状トップクラスの画質・汎用性    文字精度は上位種ほどでない $0.03/MP(1MPで約$0.03) 可
+  Midjourney           世界的に評価の高い画風            公式APIが存在しない       ―（対象外）           ―
+                                                          （非公式ラッパーはToS
+                                                          違反でBANリスクあり）
+
+  ※ Ideogramはセルフホスト版を商用利用する場合のみ別途ライセンスが必要。
+     API経由の生成物自体の商用利用は可能（要利用規約の最新確認）。
+
+【示唆】
+- 「デザインテイスト」×「正確な文字情報」の両立を売りにするなら Ideogram が本命候補。
+  「ポップ・手描き風」「和風・しっとり」等のテイスト再現性はImagen/FLUXとの比較が必要。
+- 「シンプル・モダン」×印刷(A4)用途なら Recraft のベクター出力が刺さる可能性がある
+  （拡大縮小してもボケない＝スマホ壁紙にも印刷にも同じ元データを使い回せる）。
+- Midjourneyは画風の評判は高いが公式APIがなく、今回の用途では選択肢から除外。
+
+【より本質的な代替案（要検討）】
+画像生成AI単体に「スケジュール表を正確に描かせる」のはそもそも相性が悪い。
+無料ツールとの差別化を本気で狙うなら、以下のハイブリッド構成の方が現実的：
+
+  1. TripRequestの実データ（日程・スポット名・時刻など）を、あらかじめ用意した
+     HTML/CSSデザインテンプレート（デザインテイストごとに複数用意）に正確に流し込む
+  2. それをサーバー側でヘッドレスブラウザ（Playwright等）でレンダリングして画像化する
+     → 文字は「画像生成で描く」のではなく「実際のHTML/CSSで組版する」ので、
+       日程や住所が絶対に化けない・誤情報が出ない
+  3. 背景の装飾イラスト・写真的な要素だけを Ideogram/Recraft/Imagen 等のAI画像生成で
+     別途作り、テンプレートの背景やワンポイント装飾として合成する
+
+  この方式なら「AIにそのまま貼り付けただけでは作れない、情報が正確で見た目も整った
+  仕上がりのしおり」という、無料チャットツールにはない明確な付加価値になる。
+  ただし実装コストは単純なAPI1本呼び出しより高い（テンプレート制作・レンダリング基盤が
+  別途必要）。■1-2のプロバイダ層は、このハイブリッド構成にも対応できるよう
+  「画像生成プロバイダ」と「テンプレートレンダラー」を分けて設計するのが望ましい。
+
+
+■ 1-2. 画像生成のプロバイダ層設計（プレースサジェストと同じパターン）
+------------------------------------------------------------
+trips/providers.py（住所サジェスト、PLACE_PROVIDER切り替え）と同じ設計を
+画像生成にも適用し、将来のAPI差し替え・複数プロバイダ対応をしやすくする。
+
+新規ファイル trips/image_providers.py を作成する想定。■1-1bの検討を踏まえ、
+「AI画像生成プロバイダ」と「HTMLテンプレートのレンダラー」を同じ抽象の下に
+並べられるようにしておく（どちらを既定にするかは■1-1bの結論待ち）:
+
+    class BaseImageProvider:
+        def generate(self, cleaned_trip: dict) -> bytes:
+            """TripRequestの内容（デザインテイスト/カラーイメージ/出力サイズ含む）から
+            しおり画像を1枚生成し、画像バイナリを返す。"""
+            raise NotImplementedError
+
+    class GeminiImageProvider(BaseImageProvider):
+        """Google Gemini/Imagen API。安価な既定/フォールバック向け。"""
+        def generate(self, cleaned_trip: dict) -> bytes:
+            ...  # GEMINI_IMAGE_API_KEY を使ってAPI呼び出し
+
+    class IdeogramImageProvider(BaseImageProvider):
+        """文字入り画像の精度を重視する場合の候補。"""
+        def generate(self, cleaned_trip: dict) -> bytes:
+            ...  # IDEOGRAM_API_KEY を使ってAPI呼び出し
+
+    class RecraftImageProvider(BaseImageProvider):
+        """ベクター(SVG)出力。印刷(A4)向けの出力サイズと相性が良い候補。"""
+        def generate(self, cleaned_trip: dict) -> bytes:
+            ...  # RECRAFT_API_KEY を使ってAPI呼び出し
+
+    class TemplateRenderProvider(BaseImageProvider):
+        """AI画像生成を使わず、HTML/CSSテンプレートにデータを流し込んで
+        ヘッドレスブラウザで画像化する方式（■1-1bのハイブリッド案の中核）。
+        文字（日程・住所・時刻）は絶対に化けない。装飾イラストだけ他プロバイダの
+        AI生成画像を合成することも可能。"""
+        def generate(self, cleaned_trip: dict) -> bytes:
+            ...  # Playwright等でHTMLテンプレートをレンダリング
+
+    _PROVIDERS = {
+        "gemini": GeminiImageProvider,
+        "ideogram": IdeogramImageProvider,
+        "recraft": RecraftImageProvider,
+        "template": TemplateRenderProvider,
+    }
+
+    def get_image_provider() -> BaseImageProvider:
+        return _PROVIDERS[settings.IMAGE_PROVIDER]()
+
+settings.py に追加する環境変数（backend/.env）。使わないプロバイダのキーは空でよい:
+
+    IMAGE_PROVIDER=gemini   # gemini / ideogram / recraft / template から選択
+    GEMINI_IMAGE_API_KEY=
+    IDEOGRAM_API_KEY=
+    RECRAFT_API_KEY=
+
+※ 既存の project0310 の .env に GEMINI_API_KEY が設定されているのを確認しているが、
+  値の形式が通常のGoogle AI Studio発行キー（"AIzaSy..."）と異なっており、
+  そのまま流用できるか不明。本アプリ用に改めて ai.google.dev で新規に
+  Gemini APIキーを発行し、GEMINI_IMAGE_API_KEY として別管理することを推奨する
+  （課金・利用量をアプリ単位で追跡しやすくする意味でも、キーは使い回さない方がよい）。
+
+生成する画像のプロンプトは、trips/prompt.py と同様に TripRequest の
+design_taste / color_image / aspect_ratio などから組み立てる
+（trips/prompt.py の build_prompt がテキスト用、これとは別に画像生成用の
+プロンプト文字列を組み立てる関数を trips/image_providers.py 側に用意する）。
+TemplateRenderProviderを使う場合は、プロンプト文字列の代わりにHTMLテンプレートへの
+差し込みデータ（日程・スポット名・時刻等の構造化データ）を組み立てる関数になる。
+
+
+■ 2. 事前準備（実装前に必要なもの）
+------------------------------------------------------------
+1. PayPay for Developers (https://developer.paypay.ne.jp/) でデベロッパー登録
+2. 加盟店契約・審査を通過し、以下の3つの認証情報を発行してもらう
+   - API Key
+   - API Secret
+   - Merchant ID
+   ※ サンドボックス（テスト用）と本番用で、それぞれ別の認証情報が発行される想定。
+3. 上記をチームの誰かが安全な方法（1Password等）で保管し、Claude Code / 開発者には
+   直接コピーではなく `.env` 経由でのみ渡す（チャットや読み上げでの共有は避ける）。
+
+
+■ 3. 認証情報の設定場所
+------------------------------------------------------------
+backend/.env.example に以下を追記し、実値は backend/.env に設定する
+（backend/.env は既に .gitignore 済み、コミットされない）。
+
+    PAYPAY_API_KEY=
+    PAYPAY_API_SECRET=
+    PAYPAY_MERCHANT_ID=
+    PAYPAY_PRODUCTION_MODE=0   # 0=サンドボックス, 1=本番
+
+settings.py には既に python-dotenv 導入済みなので、
+    PAYPAY_API_KEY = os.environ.get("PAYPAY_API_KEY", "")
+    PAYPAY_API_SECRET = os.environ.get("PAYPAY_API_SECRET", "")
+    PAYPAY_MERCHANT_ID = os.environ.get("PAYPAY_MERCHANT_ID", "")
+    PAYPAY_PRODUCTION_MODE = os.environ.get("PAYPAY_PRODUCTION_MODE", "0") == "1"
+のように読み込むだけでよい（trips/providers.py の GOOGLE_MAPS_API_KEY と同じパターン）。
+
+
+■ 4. 使用SDK
+------------------------------------------------------------
+公式Python SDK「paypayopa」を使う。
+
+    pip install paypayopa
+
+backend/requirements.txt に追記すること。
+
+基本的な使い方（公式READMEより）:
+
+    import paypayopa
+
+    client = paypayopa.Client(
+        auth=(settings.PAYPAY_API_KEY, settings.PAYPAY_API_SECRET),
+        production_mode=settings.PAYPAY_PRODUCTION_MODE,
+    )
+    client.set_assume_merchant(settings.PAYPAY_MERCHANT_ID)
+
+    # 1. QRコード決済の作成
+    request = {
+        "merchantPaymentId": "一意なID(例: uuid4)",
+        "codeType": "ORDER_QR",
+        "amount": {"amount": 100, "currency": "JPY"},
+        "orderDescription": "旅のしおりプロンプト 1回生成分",
+        "redirectUrl": "https://example.com/trip/<trip_id>/paid",  # 決済完了後の戻り先
+        "redirectType": "WEB_LINK",
+    }
+    response = client.Code.create_qr_code(request)
+    # response["data"]["url"] にPayPayの決済ページURL、
+    # response["data"]["deeplink"] にアプリ起動用リンクが入る想定
+    # → フロントはこのURLへ遷移させるか、QR画像として表示する
+
+    # 2. 決済状況の確認（ポーリング or Webhookで受け取る）
+    status_response = client.Payment.get_payment_details(merchant_payment_id)
+    # status_response["data"]["status"] が "COMPLETED" になったら支払い完了
+
+    # 3. 返金（必要な場合のみ）
+    refund_request = {
+        "merchantRefundId": "一意なID",
+        "paymentId": "PayPay側の決済ID",
+        "amount": {"amount": 100, "currency": "JPY"},
+        "reason": "生成に失敗したため",
+    }
+    client.Payment.refund_payment(refund_request)
+    # 注意: 1件の決済につき返金は1回のみ対応（部分返金の重ね掛け不可）
+
+※ 上記のパラメータ名・レスポンス形式は調査時点（2026年9月）の情報。実装時は
+  https://github.com/paypay/paypayopa-sdk-python の最新READMEと、
+  https://paypayue.github.io/en/ のAPIリファレンスで最新仕様を必ず確認すること。
+  特にWebhookの署名検証ヘッダー名・アルゴリズムは今回のドキュメント調査だけでは
+  裏取りできなかったため、実装時に公式リファレンスで確認すること。
+
+
+■ 5. データベース設計（追加するテーブル）
+------------------------------------------------------------
+新規モデル Payment を trips/models.py に追加する。
+
+class Payment(models.Model):
+    """PayPay決済の記録。1回の課金アクション = 1レコード。"""
+
+    STATUS_CHOICES = [
+        ("created", "作成済み(未決済)"),
+        ("completed", "決済完了"),
+        ("failed", "決済失敗"),
+        ("canceled", "キャンセル"),
+        ("refunded", "返金済み"),
+    ]
+
+    PURPOSE_IMAGE_GENERATION = "image_generation"
+    PURPOSE_CHOICES = [
+        (PURPOSE_IMAGE_GENERATION, "しおり画像生成"),
+        # 将来 都度課金/サブスクなど別の課金対象を足す場合はここに追加する
+    ]
+
+    merchant_payment_id = models.CharField(max_length=64, unique=True, db_index=True)
+    paypay_payment_id = models.CharField(max_length=64, blank=True)  # PayPay側の決済ID(取得後に保存)
+    purpose = models.CharField(max_length=30, choices=PURPOSE_CHOICES, default=PURPOSE_IMAGE_GENERATION)
+    trip = models.ForeignKey("trips.TripRequest", null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="payments")
+    device_key = models.CharField(max_length=64, blank=True, db_index=True)
+    amount = models.PositiveIntegerField(default=110)  # 円。現状は画像生成オプション固定110円
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="created")
+    raw_response = models.JSONField(default=dict, blank=True)  # PayPayからの生レスポンスを保管(調査用)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "payment"
+
+db_table = "payment" として、既存の request / feature_request / app_user / setting と
+同様に /api/db-status/ のSELECT専用テーブル一覧にも追加する（trips/views.py の
+_INSPECTABLE_MODELS に "payment": Payment を追記、ただし raw_response は機微情報を
+含みうるので _MASKED_FIELDS への追加も検討すること）。
+
+
+■ 6. 決済フロー（想定シーケンス）
+------------------------------------------------------------
+前提: 結果ページ（/trip/:tripId、frontend/src/pages/ResultPage.tsx）に
+「しおりの画像も生成する（110円）」ボタンを追加する形を想定。
+
+1. ユーザーが結果ページで「しおりの画像も生成する（110円）」ボタンを押す
+2. フロントが POST /api/payments/ を呼ぶ（trip_id, device_key を渡す。amountは送らない）
+3. バックエンドで merchant_payment_id (uuid4) を発行し、
+   Payment(purpose="image_generation", amount=110, trip=対象trip) を status=created で保存
+4. PayPay の Code.create_qr_code を呼び、決済URL/QRコードをフロントに返す
+5. フロントは以下のいずれかで決済を促す
+   - スマホ: PayPayアプリを起動するリンクへ遷移（App Invoke）
+   - PC/QR表示: QRコード画像を表示し、ユーザーがPayPayアプリで読み取る
+6. 決済完了の検知は次の2通りを両方実装するのが望ましい
+   a) Webhook（PayPayからのコールバック）でサーバー側のPaymentレコードを更新
+   b) フロントが数秒間隔で GET /api/payments/<merchant_payment_id>/ をポーリングし、
+      status が completed になったら画面を進める（Webhookが遅れる場合の保険）
+7. 決済完了(status=completed)を確認したら、サーバー側で画像生成APIを呼び出し、
+   生成した画像をTripRequestまたはPaymentに紐づけて保存し、フロントに画像を返す
+   （画像生成そのものはこのプロンプトの対象外。別途「しおり画像生成機能」の実装が先に必要）
+8. 失敗・キャンセル時はエラーメッセージを表示し、再試行できるようにする
+   （画像生成でエラーが起きた場合の返金対応も■0-3の返金ポリシーとあわせて検討）
+
+
+■ 7. 実装するAPIエンドポイント（叩き台）
+------------------------------------------------------------
+POST /api/payments/
+  - 入力: trip_id, device_key（amountはフロントから受け取らない。サーバー側で110円固定）
+  - 処理: merchant_payment_id発行 → PayPay QRコード作成 → Payment保存
+  - 返却: { merchant_payment_id, payment_url, qr_image_url, status }
+
+GET /api/payments/<merchant_payment_id>/
+  - PayPayに最新状況を問い合わせて Payment.status を更新し、現在の状態を返す
+  - フロントのポーリング用
+
+POST /api/payments/webhook/
+  - PayPayからのコールバックを受け取り、署名検証のうえ Payment.status を更新
+  - 認証なしで叩かれるエンドポイントなので、署名検証は必須
+    （検証方法は要最新ドキュメント確認。実装しないまま本番公開しないこと）
+
+
+■ 8. セキュリティ・注意事項
+------------------------------------------------------------
+- API Secret は絶対にフロントエンドに渡さない（サーバーサイドのみで使用）
+- Webhookエンドポイントは認証なしで外部から呼ばれるため、署名検証を必ず実装する
+  （検証をスキップしたまま本番稼働させない）
+- merchant_payment_id は必ず一意にする（uuid4推奨）。同じIDで二重に決済作成しない
+  （ユーザーの多重タップ・多重送信対策）
+- 金額はフロントから受け取らず、サーバー側で固定/計算した値を使う
+  （フロントから amount を送らせると改ざんされる恐れがある）
+- raw_response に個人情報が含まれる可能性があるため、/api/db-status/ で表示する際は
+  マスキングするか、そもそも一覧に含めないことを検討する
+- サンドボックスの認証情報と本番の認証情報を絶対に混同しない
+  （.envのPAYPAY_PRODUCTION_MODEで明示的に切り替え、誤って本番課金しないようにする）
+
+
+■ 9. テスト方法
+------------------------------------------------------------
+- PAYPAY_PRODUCTION_MODE=0（サンドボックス）でまず一通り動作確認する
+- サンドボックスでは実際のお金は動かない想定（PayPay Lab のテスト環境）
+- 決済作成 → QR表示 → （サンドボックス用のテスト操作で）完了 → Webhook/ポーリングで
+  ステータスが completed に変わることを一通り確認してから本番認証情報に切り替える
+
+
+■ 10. 未着手・保留にした部分
+------------------------------------------------------------
+- 【最優先】しおり画像生成機能そのものが未実装。PayPay導入より先に、
+  trips/image_providers.py（■1-2）と、design_taste等から画像生成プロンプトを
+  組み立てる処理、生成結果の画像を保存・配信する仕組み（ファイルストレージ or
+  TripRequestへのバイナリ/URL保存）を作る必要がある
+- Gemini画像生成の単価・利用規約（商用利用可否、生成物の権利関係）を
+  ai.google.dev で実装直前に必ず再確認する（■1-1の価格は非公式情報のため）
+- Webhookの署名検証の具体的な実装（ヘッダー名・アルゴリズムを最新リファレンスで要確認）
+- サブスクリプション/都度課金など他の課金方式に広げる場合は Continuous Payments という
+  別APIになる可能性が高く、今回の画像生成オプション(Web Payment)とは実装が変わる
+- 返金の管理画面（Django adminからワンクリック返金できるようにするか等）
+- 110円の採算（■1-1）が画像生成API選定後にマイナスと分かった場合の価格見直し
+
+
+■ 参考リンク（調査時点で確認できたもの）
+------------------------------------------------------------
+- PayPay for Developers（トップページ）: https://developer.paypay.ne.jp/
+- PayPay for Developers（PayPay Lab）: https://developer.paypay.ne.jp/develop/paypay-lab
+- API仕様書サイト: https://paypayue.github.io/en/
+- Python SDK: https://github.com/paypay/paypayopa-sdk-python
+- Java SDK: https://github.com/paypay/paypayopa-sdk-java
+- PayPay Developers FAQ: https://integration.paypay.ne.jp/hc/en-us
+- Gemini/Imagen 公式価格ページ（実装直前に必ずここで最新価格を確認）: https://ai.google.dev/pricing
+- Gemini画像生成の価格調査に使った非公式まとめ（参考程度、鵜呑みにしない）:
+  https://pricepertoken.com/imagen-pricing
+  https://developer.puter.com/tutorials/gemini-api-pricing/
+- Online Payments カテゴリ（アクセス制限あり、要ログイン）:
+  https://integration.paypay.ne.jp/hc/en-us/categories/9856576713359-Online-Payments
+- PayPay for Developers ローンチ発表(2020年7月, 英語): https://blog.paypay.ne.jp/en/release-of-paypay-for-developers/
+- PayPay Continuous Payments (継続課金APIの例): https://www.paypay.ne.jp/opa/doc/v1.0/continuous_payments
+- 画像生成API比較（Recraft公式ブログ）: https://www.recraft.ai/blog/best-ai-image-generation-api
+- Ideogram API価格（非公式まとめ）: https://developer.puter.com/tutorials/ideogram-api-pricing/
+- Recraft API価格（非公式まとめ）: https://tech-insider.org/ai-image-generator-api-costs-2026/
+- FLUX.2 公式価格ページ: https://bfl.ai/pricing
+- Midjourneyに公式APIが存在しない旨の解説: https://unifically.com/blogs/midjourney-api
+
+※ developer.paypay.ne.jp のトップページはJavaScriptで内容を描画するSPAのため、
+  自動取得ツールでは本文まで取得できなかった。実装に着手する際は、必ずブラウザで
+  直接開いて最新のガイド・API仕様・料金体系を人の目で確認すること。

@@ -1,0 +1,1727 @@
+/* ------------------------------------------------------------------
+   たびしおりプロンプト — スマホ操作を前提としたモバイルファーストCSS
+   ------------------------------------------------------------------ */
+
+:root {
+  --bg: #faf6f0;
+  --card: #ffffff;
+  --soft: #fdf3ec;
+  --ink: #3d3227;
+  --muted: #8b7d6b;
+  --line: #e8ded0;
+  --accent: #e07a5f;
+  --accent-dark: #c7614a;
+  --accent-soft: #fbe7df;
+  --ok: #4f8a6b;
+  --ok-soft: #e6f2ea;
+  --danger: #c0483c;
+  --danger-soft: #fbe8e6;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow: 0 2px 12px rgba(93, 74, 54, 0.08);
+  --shadow-lift: 0 10px 28px rgba(93, 74, 54, 0.16);
+  /* 動きの基準値。ここを変えるとアプリ全体の「軽快さ」がまとめて変わる。 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 0.15s;
+  --dur-base: 0.25s;
+  --dur-slow: 0.4s;
+  color-scheme: light;
+}
+
+/* 「視差効果を減らす」設定のユーザーには、演出用のアニメーションを止める。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  /* 手帳・旅のしおりらしい丸みのある温かい書体。読み込めない場合はOS標準にフォールバック。 */
+  font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic UI",
+    "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+img {
+  max-width: 100%;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- レイアウト ---------- */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(250, 246, 240, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 0 0 rgba(93, 74, 54, 0);
+  transition: box-shadow var(--dur-base) var(--ease-standard);
+}
+
+/* 少しスクロールすると浮いた感じの影を足す。 */
+.app-header--scrolled {
+  box-shadow: 0 6px 16px rgba(93, 74, 54, 0.1);
+}
+
+.app-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 16px;
+}
+
+.app-header__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.app-header__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.9rem;
+}
+
+.app-header__menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard), border-color var(--dur-base) ease,
+    background var(--dur-base) ease;
+}
+
+.app-header__menu-button:active {
+  transform: scale(0.92);
+}
+
+.app-header__menu-button[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.burger {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 18px;
+}
+
+.burger i {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease-standard), opacity var(--dur-fast) ease,
+    background var(--dur-base) ease;
+}
+
+.burger--open i {
+  background: var(--accent-dark);
+}
+
+.burger--open i:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.burger--open i:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+
+.burger--open i:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+/* 開閉のたびに毎回付け外しされる要素ではなく常にDOMに存在させ、
+   max-height / opacity / transform をアニメーションさせて滑らかに開閉する。
+   display:none を使うとトランジションが効かないため避けている。
+   position: absolute にすることで、開いてもドキュメントの高さには影響させず
+   （ページを押し下げず）ページの上に重ねて表示する。 .app-header は position: sticky
+   で自身が containing block になるため、ここでの絶対位置指定はヘッダー基準になる。 */
+.app-nav {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 16px;
+  background: rgba(250, 246, 240, 0.98);
+  backdrop-filter: blur(8px);
+  box-shadow: none;
+  transform: translateY(-4px);
+  transition: max-height var(--dur-slow) var(--ease-standard), opacity var(--dur-base) ease,
+    transform var(--dur-base) var(--ease-standard), padding var(--dur-slow) var(--ease-standard),
+    box-shadow var(--dur-base) ease;
+}
+
+.app-nav--open {
+  max-height: 480px;
+  opacity: 1;
+  padding: 4px 16px 12px;
+  box-shadow: var(--shadow-lift);
+  transform: translateY(0);
+}
+
+.app-nav__link {
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  transition: color var(--dur-fast) ease, padding-left var(--dur-fast) var(--ease-standard);
+  /* 開いたときにリンクが上から順にふわっと現れるよう、1件ずつ遅延をずらす。 */
+  opacity: 0;
+}
+
+.app-nav--open .app-nav__link {
+  animation: nav-item-in var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--nav-index, 0) * 40ms + 60ms);
+}
+
+@keyframes nav-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-nav__link:last-child {
+  border-bottom: none;
+}
+
+.app-nav__link:active {
+  padding-left: 8px;
+}
+
+.app-nav__link--active {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+/* モバイルでメニューを開いたときの背景幕。デスクトップ（768px〜）では常時非表示。 */
+.app-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: rgba(61, 50, 39, 0.32);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-base) ease;
+}
+
+.app-nav-backdrop--open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  /* Layout.tsx が route ごとに key を変えて再マウントするので、遷移のたびに毎回再生される。 */
+  animation: page-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-footer {
+  border-top: 1px solid var(--line);
+  padding: 24px 16px 32px;
+  background: var(--soft);
+  text-align: center;
+}
+
+.app-footer__note {
+  max-width: 520px;
+  margin: 0 auto 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.app-footer__operator {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.app-footer__copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* ---------- 共通パーツ ---------- */
+
+.page__title {
+  margin: 4px 0 8px;
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+.page__lead {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* テキストだけでは味気ないので、くるくる回るリングを添える（純CSS）。 */
+.loading::before {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card {
+  margin-bottom: 18px;
+  padding: 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  /* ページの入場アニメーションに続けて、カードが1枚ずつ少し遅れてふわっと現れる。 */
+  animation: card-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--dur-base) + 60ms * var(--card-index, 0));
+  transition: box-shadow var(--dur-base) ease, transform var(--dur-base) var(--ease-standard);
+}
+
+/* 最初の6枚だけ順番にずらす。それ以降は同時（待たせすぎない）。 */
+.card:nth-of-type(1) {
+  --card-index: 0;
+}
+.card:nth-of-type(2) {
+  --card-index: 1;
+}
+.card:nth-of-type(3) {
+  --card-index: 2;
+}
+.card:nth-of-type(4) {
+  --card-index: 3;
+}
+.card:nth-of-type(5) {
+  --card-index: 4;
+}
+.card:nth-of-type(n + 6) {
+  --card-index: 5;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card__header .card__title {
+  margin: 0;
+}
+
+.card__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card__title {
+  margin: 0 0 16px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.card__subtitle {
+  margin: 20px 0 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.field {
+  margin-bottom: 22px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.field__sublabel {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.field__required {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.field__hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.field__hint--accent {
+  margin-top: 8px;
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  /* iOS で拡大されないよう 16px を維持する */
+  font-size: 1rem;
+  line-height: 1.5;
+  box-shadow: 0 0 0 0 rgba(224, 122, 95, 0);
+  transition: border-color var(--dur-fast) ease, box-shadow var(--dur-base) var(--ease-standard);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.input:disabled {
+  background: #f3efe9;
+  color: var(--muted);
+}
+
+.input--other {
+  margin-top: 10px;
+  /* 「その他」欄はチップ選択直後に現れるので、少しふわっと出す。 */
+  animation: field-pop var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes field-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 rgba(93, 74, 54, 0);
+  transition: transform var(--dur-fast) var(--ease-standard), background var(--dur-base) ease,
+    box-shadow var(--dur-base) ease, border-color var(--dur-base) ease, opacity var(--dur-base) ease;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--accent-dark);
+  box-shadow: var(--shadow-lift);
+}
+
+.button--ghost {
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.button--ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.button--small {
+  min-height: 38px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+}
+
+.button--hero {
+  width: 100%;
+  min-height: 60px;
+  font-size: 1.1rem;
+  box-shadow: 0 6px 20px rgba(224, 122, 95, 0.32);
+  /* トップページに1つだけ置かれた主役ボタンなので、控えめに呼吸させて視線を集める。 */
+  animation: hero-breathe 3.2s var(--ease-standard) infinite;
+}
+
+.button--hero:hover,
+.button--hero:active {
+  animation-play-state: paused;
+}
+
+@keyframes hero-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 6px 20px rgba(224, 122, 95, 0.32);
+  }
+  50% {
+    transform: scale(1.015);
+    box-shadow: 0 10px 26px rgba(224, 122, 95, 0.42);
+  }
+}
+
+.form__actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.form__actions .button {
+  width: 100%;
+}
+
+.form__actions--split {
+  gap: 12px;
+}
+
+.form__actions--split .button {
+  width: 50%;
+}
+
+/* ---------- トップページ ---------- */
+
+.home__hero {
+  padding: 32px 4px 36px;
+  text-align: center;
+}
+
+.home__lead {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.home__title {
+  margin: 0 0 28px;
+  font-size: 1.7rem;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}
+
+.home__note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.home__sub {
+  margin-top: 12px;
+}
+
+.home__find {
+  margin-bottom: 18px;
+  padding: 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.home__find-row {
+  display: flex;
+  gap: 8px;
+}
+
+.home__find-row .button {
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding: 0 18px;
+}
+
+.home__links {
+  display: grid;
+  gap: 12px;
+}
+
+.home__link-card {
+  display: block;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) ease, transform var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-base) ease;
+}
+
+.home__link-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.home__link-card:active {
+  transform: scale(0.98);
+}
+
+.home__link-title {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.home__link-desc {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* ---------- 日付・宿泊 ---------- */
+
+.date-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.lodging-list {
+  display: grid;
+  gap: 12px;
+}
+
+.lodging-list__row {
+  display: grid;
+  gap: 8px;
+}
+
+.lodging-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.lodging-list__label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ラベルの横に置く「同じ」「考えない」「おまかせ」などの小さなショートカットボタン。 */
+.field-shortcut {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--accent-dark);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.field-shortcut:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.field-shortcut:active {
+  transform: scale(0.94);
+}
+
+/* フィールドラベルとショートカットボタンを横並びにする行。 */
+.field__label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.field__label-row .field__label {
+  margin-bottom: 0;
+}
+
+/* ---------- 増減できる入力欄 ---------- */
+
+.repeatable {
+  display: grid;
+  gap: 10px;
+}
+
+.repeatable__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* ＋で行を足したときに、新しい行だけがふわっと現れる
+     （React が index キーで既存行を使い回すため、末尾の新規行にしか掛からない）。 */
+  animation: row-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.repeatable__row .address-input,
+.repeatable__row .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-standard), background var(--dur-fast) ease;
+}
+
+.icon-button--remove:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.icon-button:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.add-button {
+  justify-self: start;
+  padding: 8px 16px;
+  border: 1px dashed var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-dark);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-style var(--dur-fast) ease, background var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.add-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.add-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.add-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.constraint-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  animation: row-in var(--dur-base) var(--ease-out) both;
+}
+
+.constraint-row__datetime {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.constraint-row__datetime .input {
+  min-width: 0;
+}
+
+.constraint-row__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.constraint-row__content .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---------- 選択チップ ---------- */
+
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background var(--dur-fast) ease,
+    color var(--dur-fast) ease, transform var(--dur-fast) var(--ease-standard);
+}
+
+.chip:active {
+  transform: scale(0.94);
+}
+
+.chip--selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-weight: 700;
+  /* 選ばれた瞬間だけ軽くポップさせて、押した手応えを出す。 */
+  animation: chip-pop var(--dur-base) var(--ease-out);
+}
+
+@keyframes chip-pop {
+  0% {
+    transform: scale(0.9);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- 住所サジェスト ---------- */
+
+.address-input {
+  position: relative;
+}
+
+.address-input__list {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-lift);
+  transform-origin: top center;
+  animation: dropdown-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.address-input__option {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, transform var(--dur-fast) var(--ease-standard);
+}
+
+.address-input__option:active {
+  transform: scale(0.98);
+}
+
+.address-input__option:hover {
+  background: var(--soft);
+}
+
+.address-input__label {
+  display: block;
+  font-weight: 700;
+}
+
+.address-input__detail {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* ---------- エラー・通知 ---------- */
+
+.error-panel {
+  margin-bottom: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.error-panel__block {
+  padding: 14px 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  /* エラーが出たことに気づいてもらえるよう、軽く小刻みに揺らして登場させる。 */
+  animation: alert-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes alert-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+  90% {
+    transform: translateX(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.error-panel__block--app {
+  border-style: dashed;
+}
+
+.error-panel__title {
+  margin: 0 0 8px;
+  color: var(--danger);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.error-panel__message {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+}
+
+.error-panel__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.88rem;
+}
+
+.error-panel__list li {
+  margin-bottom: 4px;
+}
+
+.error-panel__field {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 700;
+}
+
+.notice {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  animation: field-pop var(--dur-base) var(--ease-out) both;
+}
+
+.notice--success {
+  border: 1px solid var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.notice--info {
+  border: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--muted);
+}
+
+/* ---------- 行先の整合性チェック ---------- */
+
+.consistency-check {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.consistency-check__list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.consistency-check__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.consistency-check__item input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.site-notice {
+  padding: 10px 16px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.85rem;
+  text-align: center;
+  overflow: hidden;
+  animation: banner-in var(--dur-slow) var(--ease-standard) both;
+}
+
+@keyframes banner-in {
+  from {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    max-height: 80px;
+    opacity: 1;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: calc(100% - 32px);
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: rgba(61, 50, 39, 0.94);
+  color: #fff;
+  font-size: 0.85rem;
+  box-shadow: var(--shadow-lift);
+  animation: toast-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---------- 確認ページ ---------- */
+
+.summary {
+  margin: 0;
+}
+
+.summary__row {
+  display: grid;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.summary__row:last-child {
+  border-bottom: none;
+}
+
+.summary__label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.summary__value {
+  margin: 0;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.summary__list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.summary__empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.prompt-preview {
+  max-height: 420px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  font-family: "SFMono-Regular", "Consolas", "Noto Sans Mono", monospace;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- 結果ページ ---------- */
+
+.card--trip {
+  background: linear-gradient(135deg, #fff 0%, var(--soft) 100%);
+}
+
+.trip-meta__title {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.trip-meta__period {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.trip-meta__id {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.trip-meta__id strong {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+}
+
+.share-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.share-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.share-button:active {
+  transform: scale(0.94);
+}
+
+.share-button__icon {
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+
+.share-button:hover .share-button__icon {
+  transform: scale(1.15) rotate(-4deg);
+}
+
+.share-button:hover {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.share-button small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 400;
+}
+
+.share-button__icon {
+  font-size: 1.2rem;
+}
+
+.card--qr {
+  text-align: center;
+}
+
+.card--qr .card__title,
+.card--qr .field__hint {
+  text-align: left;
+}
+
+.qr {
+  width: 200px;
+  height: 200px;
+  margin: 8px auto 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  animation: field-pop var(--dur-slow) var(--ease-out) both;
+}
+
+.qr__id {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* ---------- 要望一覧 ---------- */
+
+.request-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.request-list__item {
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.request-list__item:last-child {
+  border-bottom: none;
+}
+
+.request-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.request-list__name {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.request-list__tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+}
+
+.request-list__date {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.request-list__body {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- 旅一覧 ---------- */
+
+.trip-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trip-list__item {
+  display: block;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-base) ease,
+    border-color var(--dur-base) ease;
+}
+
+.trip-list__item:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lift);
+}
+
+.trip-list__item:active {
+  transform: scale(0.98);
+}
+
+.trip-list__title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.trip-list__period {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.trip-list__meta {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- モーダル ---------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(61, 50, 39, 0.45);
+  animation: backdrop-in var(--dur-base) ease both;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal__panel {
+  width: 100%;
+  max-width: 440px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: 0 12px 40px rgba(61, 50, 39, 0.25);
+  animation: sheet-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal__title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.modal__text {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.modal__quote {
+  max-height: 160px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border-left: 3px solid var(--accent);
+  background: var(--soft);
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modal__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.modal__actions .button {
+  width: 50%;
+}
+
+/* ---------- テーブル状況 ---------- */
+
+.table-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-tabs__count {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(61, 50, 39, 0.08);
+  font-size: 0.72rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.data-table th,
+.data-table td {
+  max-width: 220px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.data-table th {
+  background: var(--soft);
+  font-weight: 700;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- 画面が広いとき ---------- */
+
+@media (min-width: 600px) {
+  /* 期間は1行2列。スマホ縦では1列2行のまま。 */
+  .date-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* 日付・時刻の入力欄はブラウザ既定のレンダリング幅が広く、
+     220px 程度の列幅だと隣の内容欄に重なって見えることがあったため 300px に拡げている。 */
+  .constraint-row {
+    grid-template-columns: minmax(280px, 300px) minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+  }
+
+  .home__links {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .share-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .summary__row {
+    grid-template-columns: 160px 1fr;
+    gap: 12px;
+  }
+
+  .form__actions .button {
+    width: auto;
+    min-width: 220px;
+  }
+
+  .form__actions--split .button {
+    width: auto;
+    min-width: 180px;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-header__menu-button {
+    display: none;
+  }
+
+  /* デスクトップ幅ではハンバーガーの折りたたみ演出を解除し、常時表示の横並びナビに戻す。
+     position を static に戻し、モバイル用のオーバーレイ配置を解除する。 */
+  .app-nav {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    max-width: 720px;
+    max-height: none;
+    opacity: 1;
+    overflow: visible;
+    margin: 0 auto;
+    padding: 0 16px 10px;
+    background: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    transform: none;
+    transition: none;
+  }
+
+  .app-nav__link {
+    padding: 6px 14px;
+    border-bottom: none;
+    border-radius: 999px;
+    font-size: 0.88rem;
+    opacity: 1;
+    animation: none;
+    transition: color var(--dur-fast) ease, background var(--dur-fast) ease, transform var(--dur-fast) ease;
+  }
+
+  .app-nav__link:hover {
+    background: var(--soft);
+  }
+
+  .app-nav__link:active {
+    padding-left: 14px;
+    transform: scale(0.96);
+  }
+
+  .app-nav__link--active {
+    background: var(--accent-soft);
+  }
+
+  .app-nav-backdrop {
+    display: none;
+  }
+
+  .home__title {
+    font-size: 2rem;
+  }
+
+  .button--hero {
+    width: auto;
+    min-width: 320px;
+  }
+}
