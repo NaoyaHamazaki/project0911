@@ -14,7 +14,7 @@ import urllib.request
 
 from django.conf import settings
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 MAX_CONCERNS = 10
 REQUEST_TIMEOUT_SECONDS = 10
