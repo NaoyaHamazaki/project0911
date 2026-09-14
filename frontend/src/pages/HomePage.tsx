@@ -35,14 +35,14 @@ export default function HomePage() {
           <label className="field__label" htmlFor="trip-id-input">
             旅IDから開く
           </label>
-          <p className="field__hint">作成済みのプロンプトは、旅ID（TRIP-…）を入れればいつでも開けます。</p>
+          <p className="field__hint">作成済みのプロンプトは、旅ID（T…）を入れればいつでも開けます。</p>
           <div className="home__find-row">
             <input
               id="trip-id-input"
               type="text"
               className="input"
               value={tripId}
-              placeholder="TRIP-20260912-ABC123"
+              placeholder="T4K9XQP2"
               onChange={(event) => setTripId(event.target.value)}
             />
             <button type="submit" className="button button--ghost" disabled={!tripId.trim()}>

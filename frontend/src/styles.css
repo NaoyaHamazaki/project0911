@@ -711,6 +711,15 @@ img {
   text-align: center;
 }
 
+@media (max-width: 767px) {
+  /* スマホ縦画面向け。初期表示（スクロール前）で「旅IDから開く」の見出しだけが
+     画面下端にちら見えするくらいの余白にする。①上余白＋②下余白の合計で調整。 */
+  .home__hero {
+    padding-top: 104px; /* ①: 既定32px + 追加72px */
+    padding-bottom: 156px; /* ②: 既定36px + 追加120px */
+  }
+}
+
 .home__lead {
   margin: 0 0 8px;
   color: var(--muted);
