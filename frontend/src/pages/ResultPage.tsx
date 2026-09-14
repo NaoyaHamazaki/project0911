@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 
 import ErrorPanel from '../components/ErrorPanel'
 import { AppError, api } from '../lib/api'
 import { formatPeriod } from '../lib/format'
-import type { Trip } from '../lib/types'
+import { saveDraft, startEditing } from '../lib/storage'
+import { tripToForm, type Trip } from '../lib/types'
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -31,6 +32,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 export default function ResultPage() {
   const { tripId = '' } = useParams()
+  const navigate = useNavigate()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [appError, setAppError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -87,6 +89,13 @@ export default function ResultPage() {
     await handleCopy(`${shareText}\n${shareUrl}`, 'この端末は共有メニューに対応していないため、URLをコピーしました。')
   }
 
+  const handleReEdit = () => {
+    if (!trip) return
+    saveDraft(tripToForm(trip))
+    startEditing(trip.trip_id)
+    navigate('/create')
+  }
+
   if (loading) {
     return (
       <div className="page">
@@ -121,9 +130,14 @@ export default function ResultPage() {
       <section className="card card--trip">
         <p className="trip-meta__title">{trip.title}</p>
         <p className="trip-meta__period">{formatPeriod(trip.date_from, trip.date_to)}</p>
-        <p className="trip-meta__id">
-          旅ID <strong>{trip.trip_id}</strong>
-        </p>
+        <div className="trip-meta__id-row">
+          <p className="trip-meta__id">
+            旅ID <strong>{trip.trip_id}</strong>
+          </p>
+          <button type="button" className="button button--ghost button--small" onClick={handleReEdit}>
+            再編集
+          </button>
+        </div>
       </section>
 
       <section className="card">

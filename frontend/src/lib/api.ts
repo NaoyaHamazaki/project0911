@@ -3,6 +3,7 @@ import type {
   FieldError,
   Options,
   PlaceSuggestion,
+  PromptSettingItem,
   TableInfo,
   Trip,
   TripForm,
@@ -92,6 +93,12 @@ export const api = {
 
   getTrip: (tripId: string) => request<Trip>(`/api/trips/${encodeURIComponent(tripId)}/`),
 
+  updateTrip: (tripId: string, form: TripForm, deviceKey: string) =>
+    request<Trip>(`/api/trips/${encodeURIComponent(tripId)}/`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...form, device_key: deviceKey }),
+    }),
+
   myTrips: (deviceKey: string) =>
     request<{ results: TripSummary[] }>(`/api/trips/?device_key=${encodeURIComponent(deviceKey)}`),
 
@@ -114,4 +121,21 @@ export const api = {
     request<{ table: string; columns: string[]; rows: Record<string, unknown>[]; limit: number }>(
       `/api/db-status/${encodeURIComponent(table)}/rows/`,
     ),
+
+  promptSettings: () => request<{ items: PromptSettingItem[] }>('/api/admin/prompt-settings/'),
+
+  savePromptSettings: (values: Record<string, string>) =>
+    request<{ updated: string[] }>('/api/admin/prompt-settings/', {
+      method: 'POST',
+      body: JSON.stringify(values),
+    }),
+
+  generalSettings: () =>
+    request<{ edit_requires_same_device: boolean }>('/api/admin/general-settings/'),
+
+  saveGeneralSettings: (values: { edit_requires_same_device: boolean }) =>
+    request<{ edit_requires_same_device: boolean }>('/api/admin/general-settings/', {
+      method: 'POST',
+      body: JSON.stringify(values),
+    }),
 }

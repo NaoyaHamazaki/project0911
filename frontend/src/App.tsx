@@ -1,13 +1,13 @@
 import { Link, Route, Routes } from 'react-router-dom'
 
 import Layout from './components/Layout'
+import AdminSettingsPage from './pages/AdminSettingsPage'
 import ConfirmPage from './pages/ConfirmPage'
 import CreatePage from './pages/CreatePage'
 import HomePage from './pages/HomePage'
 import MyTripsPage from './pages/MyTripsPage'
 import RequestsPage from './pages/RequestsPage'
 import ResultPage from './pages/ResultPage'
-import TablesPage from './pages/TablesPage'
 
 function NotFoundPage() {
   return (
@@ -33,7 +33,7 @@ export default function App() {
         <Route path="/trip/:tripId" element={<ResultPage />} />
         <Route path="/my-trips" element={<MyTripsPage />} />
         <Route path="/requests" element={<RequestsPage />} />
-        <Route path="/tables" element={<TablesPage />} />
+        <Route path="/admin-settings" element={<AdminSettingsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

@@ -160,5 +160,9 @@ GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 # 行先と入力場所の整合性チェック（任意機能）に使う。未設定ならチェックを行わない。
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
+# 管理者用のプロンプト編集画面（/admin-settings）を一時的に出す・隠すスイッチ。
+# 本番では設定しない（=0扱い）ことで、ナビからも消え、APIも404を返すようにする。
+ADMIN_MENU_ENABLED = os.environ.get("ADMIN_MENU_ENABLED", "0") == "1"
+
 # フロントエンドのオリジン（共有URLの組み立てに使用）
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")

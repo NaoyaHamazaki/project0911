@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import ErrorPanel from '../components/ErrorPanel'
+import ErrorPanel from './ErrorPanel'
 import { AppError, api } from '../lib/api'
 import type { TableInfo } from '../lib/types'
 
@@ -12,7 +12,8 @@ function cellText(value: unknown): string {
   return String(value)
 }
 
-export default function TablesPage() {
+/** 作成済みテーブルの参照専用ビュー（管理者設定画面の「テーブル状況」タブ）。 */
+export default function TableStatusPanel() {
   const [engine, setEngine] = useState('')
   const [tables, setTables] = useState<TableInfo[]>([])
   const [selected, setSelected] = useState<string>('')
@@ -62,8 +63,7 @@ export default function TablesPage() {
   const current = tables.find((table) => table.table === selected)
 
   return (
-    <div className="page">
-      <h1 className="page__title">テーブル状況</h1>
+    <>
       <p className="page__lead">
         作成済みのテーブルを参照のみで確認できます（更新・削除はできません）。端末キーは一部を伏せて表示します。
       </p>
@@ -154,6 +154,6 @@ export default function TablesPage() {
           )}
         </>
       )}
-    </div>
+    </>
   )
 }

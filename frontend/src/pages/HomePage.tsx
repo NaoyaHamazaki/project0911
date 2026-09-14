@@ -24,7 +24,10 @@ export default function HomePage() {
         <Link to="/create" className="button button--primary button--hero">
           旅のしおりを作る
         </Link>
-        <p className="home__note">かんたんな質問に答えるだけ。生成AIに貼り付けるだけの文章ができます。</p>
+        <p className="home__note">このアプリは、友達との旅行のしおりを作成するためのものです。<br />
+「旅のしおりを作る」ボタンを押すとフォームがひらくので、<br />
+旅行の計画を入力してみてください
+        </p>
       </section>
 
       <section className="home__sub">

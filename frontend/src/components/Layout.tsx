@@ -3,17 +3,21 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 
 import { api } from '../lib/api'
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: '/', label: 'ホーム' },
   { to: '/create', label: 'プロンプト作成' },
   { to: '/my-trips', label: '作成した旅' },
   { to: '/requests', label: '要望を送る' },
-  { to: '/tables', label: 'テーブル状況' },
 ]
+
+// 本番では出さない一時的なメニュー。backend の ADMIN_MENU_ENABLED が有効なときだけ足す。
+// テーブル状況もこの管理者設定画面のタブに統合されている。
+const ADMIN_NAV_ITEM = { to: '/admin-settings', label: '管理者設定' }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [adminMenuEnabled, setAdminMenuEnabled] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   // 768px以上はハンバーガーを使わず常時表示のナビになる（styles.css の @media と対応させる）。
   const [isDesktopNav, setIsDesktopNav] = useState(
@@ -21,12 +25,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   )
   const location = useLocation()
   const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const navItems = adminMenuEnabled ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
 
   // 管理者が Setting に入れたお知らせを表示する。取得に失敗しても画面は表示する。
+  // admin_menu_enabled は本番では基本falseなので、ここでナビの出し分けもする。
   useEffect(() => {
     api
       .options()
-      .then((options) => setNotice(options.notice))
+      .then((options) => {
+        setNotice(options.notice)
+        setAdminMenuEnabled(options.admin_menu_enabled)
+      })
       .catch(() => setNotice(''))
   }, [])
 
@@ -100,7 +109,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           className={menuOpen ? 'app-nav app-nav--open' : 'app-nav'}
           inert={!isDesktopNav && !menuOpen}
         >
-          {NAV_ITEMS.map((item, index) => (
+          {navItems.map((item, index) => (
             <NavLink
               key={item.to}
               to={item.to}

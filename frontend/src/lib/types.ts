@@ -14,6 +14,15 @@ export type Options = {
   max_trip_days: number
   max_list_items: number
   place_suggest_enabled: boolean
+  /** 管理者用プロンプト編集画面(/admin-settings)を出すかどうか。本番では基本false。 */
+  admin_menu_enabled: boolean
+}
+
+export type PromptSettingItem = {
+  key: string
+  label: string
+  value: string
+  default: string
 }
 
 export type Constraint = {
@@ -93,6 +102,35 @@ export type TableInfo = {
   verbose_name: string
   count: number | null
   columns: TableColumn[]
+}
+
+/** 保存済みのTripを、再編集用にCreatePageのフォーム形式へ変換する。 */
+export function tripToForm(trip: Trip): TripForm {
+  return {
+    title: trip.title,
+    theme: trip.theme,
+    destination: trip.destination,
+    date_from: trip.date_from,
+    date_to: trip.date_to,
+    meeting_place: trip.meeting_place,
+    dismissal_place: trip.dismissal_place,
+    lodgings: trip.lodgings,
+    must_spots: trip.must_spots.length > 0 ? trip.must_spots : [''],
+    want_spots: trip.want_spots.length > 0 ? trip.want_spots : [''],
+    schedule_paces: trip.schedule_paces,
+    schedule_pace_other: trip.schedule_pace_other,
+    rough_plans: trip.rough_plans,
+    constraints: trip.constraints,
+    ng_items: trip.ng_items.length > 0 ? trip.ng_items : [''],
+    notes: trip.notes.length > 0 ? trip.notes : [''],
+    free_notes: trip.free_notes,
+    design_taste: trip.design_taste,
+    design_taste_other: trip.design_taste_other,
+    color_image: trip.color_image,
+    color_image_other: trip.color_image_other,
+    aspect_ratio: trip.aspect_ratio,
+    aspect_ratio_other: trip.aspect_ratio_other,
+  }
 }
 
 export const emptyTripForm = (): TripForm => ({

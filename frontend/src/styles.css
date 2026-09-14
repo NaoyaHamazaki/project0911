@@ -302,7 +302,10 @@ img {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    /* translateY(0) ではなく none にする: transform に非noneの値が残っていると、
+       この要素が position:fixed な子孫（モーダルの背景幕など）の基準点になってしまい、
+       画面全体ではなくこの要素の中に閉じ込められてしまうため。 */
+    transform: none;
   }
 }
 
@@ -346,6 +349,34 @@ img {
   margin: 0 0 20px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+/* ---------- プロンプト作成フォームのステップ表示 ---------- */
+
+.step-indicator {
+  margin-bottom: 20px;
+}
+
+.step-indicator__label {
+  margin: 0 0 8px;
+  color: var(--accent-dark);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.step-indicator__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.step-indicator__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease-standard);
 }
 
 .loading {
@@ -415,7 +446,7 @@ img {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -544,6 +575,25 @@ img {
   min-height: 120px;
 }
 
+.admin-settings__textarea {
+  min-height: 200px;
+  font-family: "SFMono-Regular", "Consolas", "Noto Sans Mono", monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.admin-settings__warning {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.admin-settings__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -640,6 +690,18 @@ img {
 
 .form__actions--split .button {
   width: 50%;
+}
+
+/* 「戻る」「次へ」「上書き」のように3つ並ぶことがある場合。折り返しを許容する。 */
+.form__actions--multi {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.form__actions--multi .button {
+  width: auto;
+  flex: 1 1 30%;
+  min-width: 100px;
 }
 
 /* ---------- トップページ ---------- */
@@ -1126,6 +1188,17 @@ img {
   animation: field-pop var(--dur-base) var(--ease-out) both;
 }
 
+.notice--editing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 .notice--success {
   border: 1px solid var(--ok);
   background: var(--ok-soft);
@@ -1297,6 +1370,14 @@ img {
   margin: 0 0 10px;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.trip-meta__id-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .trip-meta__id {
@@ -1506,10 +1587,11 @@ img {
   inset: 0;
   z-index: 50;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(61, 50, 39, 0.45);
+  /* ヘッダー・フッターを含む画面全体を覆う薄い幕。以前は濃すぎたので薄くしている。 */
+  background: rgba(61, 50, 39, 0.28);
   animation: backdrop-in var(--dur-base) ease both;
 }
 
@@ -1525,6 +1607,8 @@ img {
 .modal__panel {
   width: 100%;
   max-width: 440px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   padding: 20px;
   border-radius: var(--radius-lg);
   background: var(--card);

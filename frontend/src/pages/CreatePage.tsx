@@ -9,17 +9,52 @@ import RepeatableInputs from '../components/RepeatableInputs'
 import AddressInput from '../components/AddressInput'
 import { AppError, BusinessError, api } from '../lib/api'
 import { nightsBetween } from '../lib/format'
-import { loadDraft, saveDraft } from '../lib/storage'
-import type { FieldError, Options, TripForm } from '../lib/types'
+import { clearDraft, getDeviceKey, getEditingTripId, loadDraft, saveDraft, stopEditing } from '../lib/storage'
+import { emptyTripForm, type FieldError, type Options, type TripForm } from '../lib/types'
+
+// 一度に入力する量を減らすため、フォームをステップに分けている。
+const STEP_LABELS = ['旅の基本', '集合・解散・宿泊', 'いきたいスポット', '条件', 'しおりのデザイン指示']
+const LAST_STEP = STEP_LABELS.length - 1
+
+// サーバーから返るビジネスエラーのfield名から、それが属するステップを引く。
+// エラーが出たとき、該当ステップまで自動で戻すために使う。
+const FIELD_STEP: Record<string, number> = {
+  title: 0,
+  theme: 0,
+  destination: 0,
+  date_from: 0,
+  date_to: 0,
+  meeting_place: 1,
+  dismissal_place: 1,
+  lodgings: 1,
+  must_spots: 2,
+  want_spots: 2,
+  schedule_paces: 3,
+  schedule_pace_other: 3,
+  rough_plans: 3,
+  constraints: 3,
+  ng_items: 3,
+  notes: 3,
+  free_notes: 3,
+  design_taste: 4,
+  design_taste_other: 4,
+  color_image: 4,
+  color_image_other: 4,
+  aspect_ratio: 4,
+  aspect_ratio_other: 4,
+}
 
 export default function CreatePage() {
   const navigate = useNavigate()
   const [form, setForm] = useState<TripForm>(() => loadDraft())
+  const [editingTripId, setEditingTripId] = useState<string | null>(() => getEditingTripId())
   const [options, setOptions] = useState<Options | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [businessErrors, setBusinessErrors] = useState<FieldError[]>([])
   const [appError, setAppError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [overwriting, setOverwriting] = useState(false)
+  const [step, setStep] = useState(0)
   // 行先との整合性チェックで気になる点が出た場合、ユーザーが確認したものだけ true になる。
   const [consistencyWarnings, setConsistencyWarnings] = useState<string[]>([])
   const [confirmedWarnings, setConfirmedWarnings] = useState<Record<number, boolean>>({})
@@ -86,8 +121,63 @@ export default function CreatePage() {
     navigate('/confirm')
   }
 
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+
+  const goNext = () => {
+    setStep((current) => Math.min(current + 1, LAST_STEP))
+    scrollToTop()
+  }
+
+  const goPrev = () => {
+    setStep((current) => Math.max(current - 1, 0))
+    scrollToTop()
+  }
+
+  // 編集中、途中のステップまでしか直さない場合に「上書き」でそのまま保存する。
+  // （元データを丸ごと読み込んでいるので、他の項目は既存の値のまま更新される）
+  const handleOverwrite = async () => {
+    if (!editingTripId) return
+    setOverwriting(true)
+    setBusinessErrors([])
+    setAppError(null)
+    try {
+      const trip = await api.updateTrip(editingTripId, form, getDeviceKey())
+      clearDraft()
+      stopEditing()
+      navigate(`/trip/${trip.trip_id}`)
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        setBusinessErrors(error.errors)
+        const steps = error.errors.map((e) => FIELD_STEP[e.field] ?? LAST_STEP)
+        setStep(Math.min(...steps, LAST_STEP))
+        scrollToTop()
+      } else if (error instanceof AppError) {
+        setAppError(error.message)
+      } else {
+        setAppError('予期しないエラーが発生しました。')
+      }
+    } finally {
+      setOverwriting(false)
+    }
+  }
+
+  const cancelEditing = () => {
+    stopEditing()
+    clearDraft()
+    setEditingTripId(null)
+    setForm(emptyTripForm())
+    setConsistencyWarnings([])
+    setConfirmedWarnings({})
+    setStep(0)
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    // 最後のステップ以外でEnterキー等によりsubmitされた場合は、次へ進むだけにする。
+    if (step < LAST_STEP) {
+      goNext()
+      return
+    }
     setSubmitting(true)
     setBusinessErrors([])
     setAppError(null)
@@ -104,6 +194,10 @@ export default function CreatePage() {
     } catch (error) {
       if (error instanceof BusinessError) {
         setBusinessErrors(error.errors)
+        // エラーが出た項目のうち、一番手前のステップまで戻して見つけやすくする。
+        const steps = error.errors.map((e) => FIELD_STEP[e.field] ?? LAST_STEP)
+        setStep(Math.min(...steps, LAST_STEP))
+        scrollToTop()
       } else if (error instanceof AppError) {
         setAppError(error.message)
       } else {
@@ -143,11 +237,35 @@ export default function CreatePage() {
         分かるところだけでも大丈夫です。空欄は「未定」としてプロンプトに反映されます。
       </p>
 
+      {editingTripId && (
+        <div className="notice notice--editing">
+          <span>
+            旅ID <strong>{editingTripId}</strong> を再編集中です。保存すると元のプロンプトが上書きされます。
+          </span>
+          <button type="button" className="field-shortcut" onClick={cancelEditing}>
+            編集をやめて新規作成する
+          </button>
+        </div>
+      )}
+
+      <div className="step-indicator">
+        <p className="step-indicator__label">
+          STEP {step + 1} / {STEP_LABELS.length}　{STEP_LABELS[step]}
+        </p>
+        <div className="step-indicator__bar">
+          <div
+            className="step-indicator__fill"
+            style={{ width: `${((step + 1) / STEP_LABELS.length) * 100}%` }}
+          />
+        </div>
+      </div>
+
       <div ref={errorRef}>
         <ErrorPanel businessErrors={businessErrors} appError={appError} />
       </div>
 
       <form className="form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
+        {step === 0 && (
         <section className="card">
           <h2 className="card__title">旅の基本</h2>
 
@@ -241,7 +359,9 @@ export default function CreatePage() {
             )}
           </div>
         </section>
+        )}
 
+        {step === 1 && (
         <section className="card">
           <h2 className="card__title">集合・解散・宿泊</h2>
 
@@ -330,7 +450,9 @@ export default function CreatePage() {
             )}
           </div>
         </section>
+        )}
 
+        {step === 2 && (
         <section className="card">
           <h2 className="card__title">いきたいスポット</h2>
 
@@ -362,7 +484,9 @@ export default function CreatePage() {
             />
           </div>
         </section>
+        )}
 
+        {step === 3 && (
         <section className="card">
           <h2 className="card__title">条件</h2>
 
@@ -457,7 +581,10 @@ export default function CreatePage() {
             />
           </div>
         </section>
+        )}
 
+        {step === 4 && (
+        <>
         <section className="card">
           <h2 className="card__title">しおりのデザイン指示</h2>
 
@@ -527,11 +654,42 @@ export default function CreatePage() {
             </button>
           </section>
         )}
+        </>
+        )}
 
-        <div className="form__actions">
-          <button type="submit" className="button button--primary" disabled={submitting}>
-            {submitting ? '確認中...' : '入力内容を確認する'}
-          </button>
+        <div
+          className={
+            step > 0 || (editingTripId && step < LAST_STEP)
+              ? 'form__actions form__actions--multi'
+              : 'form__actions'
+          }
+        >
+          {step > 0 && (
+            <button type="button" className="button button--ghost" onClick={goPrev}>
+              戻る
+            </button>
+          )}
+          {step < LAST_STEP ? (
+            <>
+              <button type="button" className="button button--primary" onClick={goNext}>
+                次へ
+              </button>
+              {editingTripId && (
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => void handleOverwrite()}
+                  disabled={overwriting}
+                >
+                  {overwriting ? '保存中...' : '上書き'}
+                </button>
+              )}
+            </>
+          ) : (
+            <button type="submit" className="button button--primary" disabled={submitting}>
+              {submitting ? '確認中...' : '入力内容を確認する'}
+            </button>
+          )}
         </div>
       </form>
     </div>

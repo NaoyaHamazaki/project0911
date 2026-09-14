@@ -11,4 +11,6 @@ urlpatterns = [
     path("places/suggest/", views.PlaceSuggestView.as_view()),
     path("db-status/", views.TableStatusView.as_view()),
     path("db-status/<str:table>/rows/", views.TableRowsView.as_view()),
+    path("admin/prompt-settings/", views.PromptSettingsView.as_view()),
+    path("admin/general-settings/", views.GeneralSettingsView.as_view()),
 ]

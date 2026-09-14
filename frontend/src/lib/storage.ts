@@ -2,6 +2,7 @@ import { emptyTripForm, type TripForm } from './types'
 
 const DEVICE_KEY = 'tabishiori.device_key'
 const DRAFT_KEY = 'tabishiori.draft'
+const EDITING_TRIP_ID_KEY = 'tabishiori.editing_trip_id'
 
 function safeGet(storage: Storage, key: string): string | null {
   try {
@@ -52,6 +53,26 @@ export function saveDraft(form: TripForm) {
 export function clearDraft() {
   try {
     sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // 何もしない
+  }
+}
+
+/**
+ * 「再編集」中かどうか。結果ページの「再編集」から作成フォームに来たとき、
+ * どの旅を上書き更新するのかをここに覚えておく。
+ */
+export function startEditing(tripId: string) {
+  safeSet(sessionStorage, EDITING_TRIP_ID_KEY, tripId)
+}
+
+export function getEditingTripId(): string | null {
+  return safeGet(sessionStorage, EDITING_TRIP_ID_KEY)
+}
+
+export function stopEditing() {
+  try {
+    sessionStorage.removeItem(EDITING_TRIP_ID_KEY)
   } catch {
     // 何もしない
   }

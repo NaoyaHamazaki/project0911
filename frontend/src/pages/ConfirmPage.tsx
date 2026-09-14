@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import ErrorPanel from '../components/ErrorPanel'
 import { AppError, BusinessError, api } from '../lib/api'
 import { formatDate, formatPeriod, nightsBetween } from '../lib/format'
-import { clearDraft, getDeviceKey, loadDraft } from '../lib/storage'
+import { clearDraft, getDeviceKey, getEditingTripId, loadDraft, stopEditing } from '../lib/storage'
 import type { Choice, FieldError, Options, TripForm } from '../lib/types'
 
 function labelOfChoice(choices: Choice[] | undefined, value: string, otherValue: string, otherText: string) {
@@ -44,6 +44,7 @@ function ListValue({ items, empty = '指定なし' }: { items: string[]; empty?:
 export default function ConfirmPage() {
   const navigate = useNavigate()
   const form: TripForm = useMemo(() => loadDraft(), [])
+  const editingTripId = useMemo(() => getEditingTripId(), [])
   const [options, setOptions] = useState<Options | null>(null)
   const [businessErrors, setBusinessErrors] = useState<FieldError[]>([])
   const [appError, setAppError] = useState<string | null>(null)
@@ -87,8 +88,11 @@ export default function ConfirmPage() {
     setBusinessErrors([])
     setAppError(null)
     try {
-      const trip = await api.createTrip(form, getDeviceKey())
+      const trip = editingTripId
+        ? await api.updateTrip(editingTripId, form, getDeviceKey())
+        : await api.createTrip(form, getDeviceKey())
       clearDraft()
+      stopEditing()
       navigate(`/trip/${trip.trip_id}`, { replace: true })
     } catch (error) {
       if (error instanceof BusinessError) {
@@ -105,7 +109,11 @@ export default function ConfirmPage() {
   return (
     <div className="page">
       <h1 className="page__title">入力内容の確認</h1>
-      <p className="page__lead">この内容でプロンプトを出力します。直したいところがあれば戻って修正してください。</p>
+      <p className="page__lead">
+        {editingTripId
+          ? `旅ID ${editingTripId} の内容を上書き更新します。直したいところがあれば戻って修正してください。`
+          : 'この内容でプロンプトを出力します。直したいところがあれば戻って修正してください。'}
+      </p>
 
       <ErrorPanel businessErrors={businessErrors} appError={appError} onRetry={() => void check()} />
 
@@ -185,7 +193,7 @@ export default function ConfirmPage() {
           onClick={() => void handleOutput()}
           disabled={checking || submitting || businessErrors.length > 0}
         >
-          {submitting ? '出力中...' : '出力'}
+          {submitting ? (editingTripId ? '更新中...' : '出力中...') : editingTripId ? '更新する' : '出力'}
         </button>
       </div>
     </div>
