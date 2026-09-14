@@ -671,9 +671,6 @@ export default function CreatePage() {
           )}
           {step < LAST_STEP ? (
             <>
-              <button type="button" className="button button--primary" onClick={goNext}>
-                次へ
-              </button>
               {editingTripId && (
                 <button
                   type="button"
@@ -684,6 +681,9 @@ export default function CreatePage() {
                   {overwriting ? '保存中...' : '上書き'}
                 </button>
               )}
+              <button type="button" className="button button--primary" onClick={goNext}>
+                次へ
+              </button>
             </>
           ) : (
             <button type="submit" className="button button--primary" disabled={submitting}>
