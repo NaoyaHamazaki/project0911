@@ -44,3 +44,29 @@ def label_of(choices, value):
         if key == value:
             return label
     return value or ""
+
+
+# ---- 往路・復路の交通手段（チップ選択＋「その他」で自由入力） ----
+TRANSPORTS = [
+    ("shinkansen", "新幹線・電車"),
+    ("airplane", "飛行機"),
+    ("car", "車"),
+    ("bus", "高速バス"),
+    (OTHER, "その他"),
+]
+
+RESERVATION_STATUSES = [
+    ("reserved", "予約済み"),
+    ("not_reserved", "未予約"),
+    ("not_needed", "手配不要"),
+]
+
+# ---- 宿泊先の決め方（泊ごと） ----
+LODGING_NAME = "name"
+LODGING_AREA = "area"
+LODGING_OMAKASE = "omakase"
+LODGING_MODES = [
+    (LODGING_NAME, "宿名"),
+    (LODGING_AREA, "検討エリア"),
+    (LODGING_OMAKASE, "おまかせ"),
+]

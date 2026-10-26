@@ -1,5 +1,7 @@
 import type {
   FeatureRequestItem,
+  FeedbackInfo,
+  FeedbackItem,
   FieldError,
   Options,
   PlaceSuggestion,
@@ -80,7 +82,7 @@ export const api = {
   options: () => request<Options>('/api/options/'),
 
   validateTrip: (form: TripForm) =>
-    request<{ errors: FieldError[]; prompt_text: string; consistency_warnings: string[] }>(
+    request<{ errors: FieldError[]; prompt_text: string; image_prompt_text: string; consistency_warnings: string[] }>(
       '/api/trips/validate/',
       { method: 'POST', body: JSON.stringify(form) },
     ),
@@ -101,6 +103,14 @@ export const api = {
 
   myTrips: (deviceKey: string) =>
     request<{ results: TripSummary[] }>(`/api/trips/?device_key=${encodeURIComponent(deviceKey)}`),
+
+  tripFeedback: (tripId: string) => request<FeedbackInfo>(`/api/trips/${encodeURIComponent(tripId)}/feedback/`),
+
+  sendTripFeedback: (tripId: string, payload: { nickname: string; body: string }) =>
+    request<FeedbackItem>(`/api/trips/${encodeURIComponent(tripId)}/feedback/`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   featureRequests: () => request<{ results: FeatureRequestItem[] }>('/api/feature-requests/'),
 

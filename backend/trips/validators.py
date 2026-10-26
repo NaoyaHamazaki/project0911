@@ -7,6 +7,7 @@
 from datetime import date, datetime
 
 from . import choices
+from .lodging import normalize_lodgings
 
 MAX_TRIP_DAYS = 31
 MAX_LIST_ITEMS = 20
@@ -98,6 +99,38 @@ def _normalize_date(value):
     return parsed if parsed is not None else _as_text(value)
 
 
+def _nights_of(data: dict) -> int:
+    date_from = _parse_date(data.get("date_from"))
+    date_to = _parse_date(data.get("date_to"))
+    if date_from and date_to and date_to >= date_from:
+        return (date_to - date_from).days
+    return 0
+
+
+def _merge_free_notes(data: dict) -> str:
+    """入力欄を廃止したスケジュール感・NG項目・配慮メモを、自由入力欄へまとめる。
+
+    古い旅データやAPI経由の値が残っていても情報が消えないよう、
+    自由入力欄の末尾に追記する（新しいフォームからは常に空で届く）。
+    """
+    parts = [_as_text(data.get("free_notes"))]
+    paces = _as_text_list(data.get("schedule_paces"))
+    if paces:
+        labels = dict(choices.SCHEDULE_PACES)
+        names = [
+            _as_text(data.get("schedule_pace_other")) or labels[choices.OTHER] if value == choices.OTHER else labels.get(value, value)
+            for value in paces
+        ]
+        parts.append("スケジュール感: " + "、".join(names))
+    ng_items = _as_text_list(data.get("ng_items"))
+    if ng_items:
+        parts.append("NG項目: " + "、".join(ng_items))
+    notes = _as_text_list(data.get("notes"))
+    if notes:
+        parts.append("配慮事項: " + "、".join(notes))
+    return "\n".join(part for part in parts if part)[:2000]
+
+
 def normalize(data: dict) -> dict:
     """リクエストの生データをモデルに保存できる形へ整える。"""
     return {
@@ -106,22 +139,31 @@ def normalize(data: dict) -> dict:
         "destination": _as_text(data.get("destination"))[:200],
         "date_from": _normalize_date(data.get("date_from")),
         "date_to": _normalize_date(data.get("date_to")),
+        "outbound_transport": _as_text(data.get("outbound_transport")),
+        "outbound_transport_other": _as_text(data.get("outbound_transport_other"))[:200],
+        "outbound_reservation": _as_text(data.get("outbound_reservation")),
+        "return_transport": _as_text(data.get("return_transport")),
+        "return_transport_other": _as_text(data.get("return_transport_other"))[:200],
+        "return_reservation": _as_text(data.get("return_reservation")),
         "meeting_place": _as_text(data.get("meeting_place"))[:MAX_TEXT_LENGTH],
         "dismissal_place": _as_text(data.get("dismissal_place"))[:MAX_TEXT_LENGTH],
-        "lodgings": _as_text_list(data.get("lodgings")),
+        # 旧形式(文字列)も新形式({mode, value})にそろえ、泊数ぶんに整える。
+        "lodgings": normalize_lodgings(data.get("lodgings"), _nights_of(data)),
         "must_spots": _as_text_list(data.get("must_spots")),
         "want_spots": _as_text_list(data.get("want_spots")),
-        "schedule_paces": _as_text_list(data.get("schedule_paces")),
-        "schedule_pace_other": _as_text(data.get("schedule_pace_other"))[:200],
+        # スケジュール感・NG項目・配慮メモ・テイスト・カラーは入力欄を廃止した。
+        "schedule_paces": [],
+        "schedule_pace_other": "",
         "rough_plans": _as_text_list(data.get("rough_plans")),
         "constraints": _normalize_constraints(data.get("constraints")),
-        "ng_items": _as_text_list(data.get("ng_items")),
-        "notes": _as_text_list(data.get("notes")),
-        "free_notes": _as_text(data.get("free_notes"))[:2000],
-        "design_taste": _as_text(data.get("design_taste")),
-        "design_taste_other": _as_text(data.get("design_taste_other"))[:200],
-        "color_image": _as_text(data.get("color_image")),
-        "color_image_other": _as_text(data.get("color_image_other"))[:200],
+        "ng_items": [],
+        "notes": [],
+        "free_notes": _merge_free_notes(data),
+        "collect_feedback": bool(data.get("collect_feedback")),
+        "design_taste": "",
+        "design_taste_other": "",
+        "color_image": "",
+        "color_image_other": "",
         "aspect_ratio": _as_text(data.get("aspect_ratio")),
         "aspect_ratio_other": _as_text(data.get("aspect_ratio_other"))[:200],
         "device_key": _as_text(data.get("device_key"))[:64],
@@ -157,18 +199,13 @@ def validate(cleaned: dict) -> list:
             if nights + 1 > MAX_TRIP_DAYS:
                 errors.append({"field": "date_to", "message": f"旅程は最長{MAX_TRIP_DAYS}日までです。"})
 
-    if not cleaned["meeting_place"]:
-        errors.append({"field": "meeting_place", "message": "集合場所を入力してください。"})
-
-    # 宿泊場所は泊数と件数が一致していること（日帰りなら入力不可）。
-    lodgings = cleaned["lodgings"]
-    if nights == 0 and lodgings:
-        errors.append({"field": "lodgings", "message": "日帰りのため宿泊場所は入力できません。"})
-    elif nights > 0 and len(lodgings) != nights:
-        errors.append({
-            "field": "lodgings",
-            "message": f"{nights}泊のため宿泊場所を{nights}件入力してください（現在{len(lodgings)}件）。",
-        })
+    # 交通手段・予約状況・宿泊の決め方は画面上は必須表示だが、旧データの再編集や
+    # 「上書き」保存を妨げないよう、未入力はエラーにしない（値の妥当性のみ確認する）。
+    # 宿泊場所の件数は normalize で泊数ぶんに自動調整済み。
+    for prefix, label in [("outbound", "往路"), ("return", "復路")]:
+        _check_choice(cleaned, errors, f"{prefix}_transport", f"{label}の交通手段", choices.TRANSPORTS, required=False)
+        _check_choice(cleaned, errors, f"{prefix}_reservation", f"{label}の予約状況", choices.RESERVATION_STATUSES, required=False)
+        _check_other(cleaned, errors, f"{prefix}_transport", f"{label}の交通手段")
 
     for field, label in [
         ("must_spots", "いきたいスポット（MUST）"),
@@ -199,9 +236,10 @@ def validate(cleaned: dict) -> list:
                 break
 
     _check_multi_choice(cleaned, errors, "schedule_paces", "スケジュール感", choices.SCHEDULE_PACES, required=False)
-    _check_choice(cleaned, errors, "design_taste", "デザインテイスト", choices.DESIGN_TASTES)
-    _check_choice(cleaned, errors, "color_image", "カラーイメージ", choices.COLOR_IMAGES)
-    _check_choice(cleaned, errors, "aspect_ratio", "出力サイズ", choices.ASPECT_RATIOS)
+    # デザイン指示は任意。未選択はプロンプト上「おまかせ」として扱う。
+    _check_choice(cleaned, errors, "design_taste", "デザインテイスト", choices.DESIGN_TASTES, required=False)
+    _check_choice(cleaned, errors, "color_image", "カラーイメージ", choices.COLOR_IMAGES, required=False)
+    _check_choice(cleaned, errors, "aspect_ratio", "出力サイズ", choices.ASPECT_RATIOS, required=False)
 
     _check_other_multi(cleaned, errors, "schedule_paces", "schedule_pace_other", "スケジュール感")
     _check_other(cleaned, errors, "design_taste", "デザインテイスト")

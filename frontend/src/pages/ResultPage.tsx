@@ -4,9 +4,9 @@ import QRCode from 'qrcode'
 
 import ErrorPanel from '../components/ErrorPanel'
 import { AppError, api } from '../lib/api'
-import { formatPeriod } from '../lib/format'
+import { formatDateTime, formatPeriod } from '../lib/format'
 import { saveDraft, startEditing } from '../lib/storage'
-import { tripToForm, type Trip } from '../lib/types'
+import { tripToForm, type FeedbackItem, type Trip } from '../lib/types'
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -38,8 +38,9 @@ export default function ResultPage() {
   const [loading, setLoading] = useState(true)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [toast, setToast] = useState('')
-  // プロンプト本文はデフォルト非表示。「確認」ボタンで開閉する。
-  const [promptVisible, setPromptVisible] = useState(false)
+  // プロンプト本文はデフォルト非表示。「確認」ボタンでそれぞれ開閉する。
+  const [visible, setVisible] = useState<Record<string, boolean>>({})
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([])
 
   const shareUrl = `${window.location.origin}/trip/${tripId}`
 
@@ -65,6 +66,15 @@ export default function ResultPage() {
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(''))
   }, [trip, shareUrl])
+
+  // 意見聴取をONにしている旅だけ、参加者からの意見を読み込む（1回だけ。自動更新はしない）。
+  useEffect(() => {
+    if (!trip?.collect_feedback) return
+    api
+      .tripFeedback(trip.trip_id)
+      .then((data) => setFeedbacks(data.results))
+      .catch(() => setFeedbacks([]))
+  }, [trip])
 
   const notify = (message: string) => {
     setToast(message)
@@ -117,6 +127,24 @@ export default function ResultPage() {
     )
   }
 
+  const feedbackUrl = `${window.location.origin}/trip/${trip.trip_id}/feedback`
+  const outputs = [
+    {
+      key: 'itinerary',
+      title: '行程表プロンプト',
+      hint: 'ChatGPT・Gemini などのチャットAIに貼り付けると、日ごとの行程表（テキスト）を作ってくれます。',
+      text: trip.prompt_text,
+      copied: '行程表プロンプトをコピーしました',
+    },
+    {
+      key: 'image',
+      title: '画像生成用プロンプト',
+      hint: '画像生成AIに貼り付けると、デザイン指示に沿ったしおりの表紙画像を作ってくれます。',
+      text: trip.image_prompt_text,
+      copied: '画像生成用プロンプトをコピーしました',
+    },
+  ]
+
   const shareText = `「${trip.title}」の旅のしおりプロンプトを作りました！`
   const mailBody = `${shareText}\n\n旅ID: ${trip.trip_id}\n${shareUrl}\n\n----- プロンプト -----\n${trip.prompt_text}`
 
@@ -124,7 +152,7 @@ export default function ResultPage() {
     <div className="page">
       <h1 className="page__title">プロンプトができました</h1>
       <p className="page__lead">
-        下の文章をコピーして、生成AIに貼り付けてください。旅IDを控えておけば、あとからいつでも開けます。
+        用途に合わせて2種類のプロンプトをコピーし、生成AIに貼り付けてください。旅IDを控えておけば、あとからいつでも開けます。
       </p>
 
       <section className="card card--trip">
@@ -140,33 +168,72 @@ export default function ResultPage() {
         </div>
       </section>
 
-      <section className="card">
-        <div className="card__header">
-          <h2 className="card__title">プロンプト</h2>
-          <div className="card__header-actions">
+      {outputs.map((output) => (
+        <section className="card" key={output.key}>
+          <div className="card__header">
+            <h2 className="card__title">{output.title}</h2>
+            <div className="card__header-actions">
+              <button
+                type="button"
+                className="button button--ghost button--small"
+                aria-expanded={Boolean(visible[output.key])}
+                onClick={() => setVisible((current) => ({ ...current, [output.key]: !current[output.key] }))}
+              >
+                {visible[output.key] ? '隠す' : '確認'}
+              </button>
+              <button
+                type="button"
+                className="button button--primary button--small"
+                disabled={!output.text}
+                onClick={() => void handleCopy(output.text, output.copied)}
+              >
+                コピー
+              </button>
+            </div>
+          </div>
+          <p className="field__hint">{output.hint}</p>
+          {visible[output.key] &&
+            (output.text ? (
+              <pre className="prompt-preview">{output.text}</pre>
+            ) : (
+              <p className="summary__empty">まだ作成されていません。「再編集」から保存し直すと作成されます。</p>
+            ))}
+        </section>
+      ))}
+
+      {trip.collect_feedback && (
+        <section className="card">
+          <h2 className="card__title">参加者からの意見（{feedbacks.length}件）</h2>
+          <p className="field__hint">
+            このURLを参加者に送ると、ログインなしで意見を送ってもらえます。届いた意見は自動では反映されないので、必要に応じて「再編集」で入力に加えてください。
+          </p>
+          <div className="feedback-url">
+            <code className="feedback-url__text">{feedbackUrl}</code>
             <button
               type="button"
               className="button button--ghost button--small"
-              aria-expanded={promptVisible}
-              onClick={() => setPromptVisible((visible) => !visible)}
+              onClick={() => void handleCopy(feedbackUrl, '回答URLをコピーしました')}
             >
-              {promptVisible ? '隠す' : '確認'}
-            </button>
-            <button
-              type="button"
-              className="button button--primary button--small"
-              onClick={() => void handleCopy(trip.prompt_text, 'プロンプトをコピーしました')}
-            >
-              コピー
+              URLをコピー
             </button>
           </div>
-        </div>
-        {promptVisible ? (
-          <pre className="prompt-preview">{trip.prompt_text}</pre>
-        ) : (
-          <p className="field__hint">「確認」を押すとプロンプトの内容を表示します。</p>
-        )}
-      </section>
+          {feedbacks.length === 0 ? (
+            <p className="summary__empty">まだ意見は届いていません。</p>
+          ) : (
+            <ul className="request-list">
+              {feedbacks.map((item) => (
+                <li className="request-list__item" key={item.id}>
+                  <div className="request-list__head">
+                    <span className="request-list__name">{item.nickname || '名無し'}</span>
+                    <span className="request-list__date">{formatDateTime(item.created_at)}</span>
+                  </div>
+                  <p className="request-list__body">{item.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="card card--qr">
         <h2 className="card__title">QRコードで渡す</h2>

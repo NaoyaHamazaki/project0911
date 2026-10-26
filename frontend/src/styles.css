@@ -1818,3 +1818,38 @@ img {
     min-width: 320px;
   }
 }
+
+/* ---------- 4ステップ化で追加した部品 ---------- */
+
+.transport-block + .transport-block {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.places-dismissal {
+  margin-top: 14px;
+}
+
+.lodging-list__input {
+  margin-top: 8px;
+}
+
+.feedback-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+
+.feedback-url__text {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 0.78rem;
+  word-break: break-all;
+}

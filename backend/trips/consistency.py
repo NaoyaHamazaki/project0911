@@ -14,6 +14,8 @@ import urllib.request
 
 from django.conf import settings
 
+from .lodging import describe_lodging
+
 GEMINI_MODEL = "gemini-3.6-flash"
 GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 MAX_CONCERNS = 10
@@ -28,8 +30,10 @@ def _collect_places(cleaned: dict) -> list:
     if cleaned.get("dismissal_place"):
         places.append(f"解散場所: {cleaned['dismissal_place']}")
     for index, lodging in enumerate(cleaned.get("lodgings") or [], start=1):
-        if lodging:
-            places.append(f"{index}泊目の宿泊場所: {lodging}")
+        text = describe_lodging(lodging)
+        # 「おまかせ」は場所の情報を持たないのでチェック対象外。
+        if text and not text.startswith("おまかせ"):
+            places.append(f"{index}泊目の宿泊場所: {text}")
     for spot in cleaned.get("must_spots") or []:
         if spot:
             places.append(f"いきたいスポット(MUST): {spot}")

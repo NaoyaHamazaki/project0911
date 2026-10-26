@@ -1,4 +1,4 @@
-import { emptyTripForm, type TripForm } from './types'
+import { emptyTripForm, normalizeLodging, type TripForm } from './types'
 
 const DEVICE_KEY = 'tabishiori.device_key'
 const DRAFT_KEY = 'tabishiori.draft'
@@ -40,7 +40,9 @@ export function loadDraft(): TripForm {
   const raw = safeGet(sessionStorage, DRAFT_KEY)
   if (!raw) return emptyTripForm()
   try {
-    return { ...emptyTripForm(), ...(JSON.parse(raw) as Partial<TripForm>) }
+    const draft = { ...emptyTripForm(), ...(JSON.parse(raw) as Partial<TripForm>) }
+    // 旧形式（宿泊が文字列）の下書きが残っていても新形式で扱えるようにする。
+    return { ...draft, lodgings: (draft.lodgings ?? []).map(normalizeLodging) }
   } catch {
     return emptyTripForm()
   }

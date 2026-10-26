@@ -7,6 +7,7 @@ urlpatterns = [
     path("trips/", views.TripListCreateView.as_view()),
     path("trips/validate/", views.TripValidateView.as_view()),
     path("trips/<str:trip_id>/", views.TripDetailView.as_view()),
+    path("trips/<str:trip_id>/feedback/", views.TripFeedbackView.as_view()),
     path("feature-requests/", views.FeatureRequestListCreateView.as_view()),
     path("places/suggest/", views.PlaceSuggestView.as_view()),
     path("db-status/", views.TableStatusView.as_view()),

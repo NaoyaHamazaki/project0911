@@ -48,10 +48,20 @@ class TripRequest(models.Model):
     date_from = models.DateField("期間自")
     date_to = models.DateField("期間至")
 
+    # 往路・復路の交通手段と予約状況。画面上は必須表示だが、旧データの再編集を妨げないよう
+    # サーバー側では空を許容する。
+    outbound_transport = models.CharField("往路の交通手段", max_length=20, blank=True)
+    outbound_transport_other = models.CharField("往路の交通手段(その他)", max_length=200, blank=True)
+    outbound_reservation = models.CharField("往路の予約状況", max_length=20, blank=True)
+    return_transport = models.CharField("復路の交通手段", max_length=20, blank=True)
+    return_transport_other = models.CharField("復路の交通手段(その他)", max_length=200, blank=True)
+    return_reservation = models.CharField("復路の予約状況", max_length=20, blank=True)
+
     meeting_place = models.CharField("集合場所", max_length=255, blank=True)
     dismissal_place = models.CharField("解散場所", max_length=255, blank=True)
 
     # 複数値の項目は JSON で保持する。
+    # lodgings は泊ごとの {"mode": "name"|"area"|"omakase", "value": "..."}。旧データは文字列（lodging.py参照）。
     lodgings = models.JSONField("宿泊場所", default=list, blank=True)
     must_spots = models.JSONField("いきたいスポット(MUST)", default=list, blank=True)
     want_spots = models.JSONField("いきたいスポット(WANT)", default=list, blank=True)
@@ -65,6 +75,8 @@ class TripRequest(models.Model):
     ng_items = models.JSONField("NG項目", default=list, blank=True)
     notes = models.JSONField("配慮・共有メモ", default=list, blank=True)
     free_notes = models.TextField("自由入力欄", blank=True)
+    # 参加者へ意見聴取フォーム(/trip/<id>/feedback)を公開するか
+    collect_feedback = models.BooleanField("旅行意見聴取", default=False)
 
     design_taste = models.CharField("デザインテイスト", max_length=20, blank=True)
     design_taste_other = models.CharField("デザインテイスト(その他)", max_length=200, blank=True)
@@ -73,7 +85,8 @@ class TripRequest(models.Model):
     aspect_ratio = models.CharField("出力サイズ", max_length=20, blank=True)
     aspect_ratio_other = models.CharField("出力サイズ(その他)", max_length=200, blank=True)
 
-    prompt_text = models.TextField("生成プロンプト", blank=True)
+    prompt_text = models.TextField("生成プロンプト(行程表)", blank=True)
+    image_prompt_text = models.TextField("生成プロンプト(画像生成用)", blank=True)
 
     created_at = models.DateTimeField("作成日時", auto_now_add=True)
     updated_at = models.DateTimeField("更新日時", auto_now=True)
@@ -122,6 +135,24 @@ class TripRequest(models.Model):
         if self.aspect_ratio == choices.OTHER:
             return self.aspect_ratio_other
         return choices.label_of(choices.ASPECT_RATIOS, self.aspect_ratio)
+
+
+class TripFeedback(models.Model):
+    """旅行意見聴取フォームから参加者が送った意見。主催者は一覧で読むだけ（自動反映はしない）。"""
+
+    trip = models.ForeignKey(TripRequest, verbose_name="旅", on_delete=models.CASCADE, related_name="feedbacks")
+    nickname = models.CharField("ニックネーム", max_length=50, blank=True)
+    body = models.TextField("意見", max_length=1000)
+    created_at = models.DateTimeField("投稿日時", auto_now_add=True)
+
+    class Meta:
+        db_table = "trip_feedback"
+        verbose_name = "旅行意見"
+        verbose_name_plural = "旅行意見"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.trip.trip_id}: {self.body[:20]}"
 
 
 class FeatureRequest(models.Model):

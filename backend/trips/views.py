@@ -7,9 +7,10 @@ from rest_framework.views import APIView
 from . import choices, consistency
 from . import prompt as prompt_builder
 from . import providers, validators
-from .models import AppUser, FeatureRequest, Setting, TripRequest, generate_trip_id
+from .models import AppUser, FeatureRequest, Setting, TripFeedback, TripRequest, generate_trip_id
 from .serializers import (
     FeatureRequestSerializer,
+    TripFeedbackSerializer,
     TripRequestSerializer,
     TripRequestSummarySerializer,
 )
@@ -45,6 +46,9 @@ class OptionsView(APIView):
             "design_tastes": _choice_payload(choices.DESIGN_TASTES),
             "color_images": _choice_payload(choices.COLOR_IMAGES),
             "aspect_ratios": _choice_payload(choices.ASPECT_RATIOS),
+            "transports": _choice_payload(choices.TRANSPORTS),
+            "reservation_statuses": _choice_payload(choices.RESERVATION_STATUSES),
+            "lodging_modes": _choice_payload(choices.LODGING_MODES),
             "feature_request_categories": _choice_payload(FEATURE_REQUEST_CATEGORIES),
             "other_value": choices.OTHER,
             "max_trip_days": validators.MAX_TRIP_DAYS,
@@ -138,6 +142,7 @@ class TripValidateView(APIView):
         return Response({
             "errors": [],
             "prompt_text": prompt_builder.build_prompt(cleaned),
+            "image_prompt_text": prompt_builder.build_image_prompt(cleaned),
             "consistency_warnings": concerns,
         })
 
@@ -157,6 +162,7 @@ class TripListCreateView(APIView):
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
         cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
+        cleaned["image_prompt_text"] = prompt_builder.build_image_prompt(cleaned)
         trip = TripRequest.objects.create(trip_id=generate_trip_id(), **cleaned)
         return Response(TripRequestSerializer(trip).data, status=status.HTTP_201_CREATED)
 
@@ -197,10 +203,52 @@ class TripDetailView(APIView):
 
         cleaned.pop("device_key", None)  # 所有者(端末)は編集で変えない
         cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
+        cleaned["image_prompt_text"] = prompt_builder.build_image_prompt(cleaned)
         for key, value in cleaned.items():
             setattr(trip, key, value)
         trip.save()
         return Response(TripRequestSerializer(trip).data)
+
+
+class TripFeedbackView(APIView):
+    """旅行意見聴取。参加者はログイン不要で意見を送り、主催者は一覧を読む。
+
+    主催者が「意見を聞く」をONにした旅だけ受け付ける。寄せられた意見は
+    MUST/WANT等へ自動反映せず、主催者が読んで手動で反映する運用。
+    """
+
+    def _trip(self, trip_id):
+        return TripRequest.objects.filter(trip_id=trip_id.strip().upper()).first()
+
+    def get(self, request, trip_id):
+        trip = self._trip(trip_id)
+        if trip is None:
+            return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            "trip_id": trip.trip_id,
+            "title": trip.title,
+            "date_from": trip.date_from,
+            "date_to": trip.date_to,
+            "destination": trip.destination,
+            "open": trip.collect_feedback,
+            "results": TripFeedbackSerializer(trip.feedbacks.all()[:200], many=True).data,
+        })
+
+    def post(self, request, trip_id):
+        trip = self._trip(trip_id)
+        if trip is None:
+            return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
+        if not trip.collect_feedback:
+            return Response(
+                {"errors": [{"field": "body", "message": "この旅では現在、意見を受け付けていません。"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = TripFeedbackSerializer(data=request.data or {})
+        if not serializer.is_valid():
+            errors = [{"field": f, "message": m[0]} for f, m in serializer.errors.items()]
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save(trip=trip)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class FeatureRequestListCreateView(APIView):
@@ -241,6 +289,7 @@ class PlaceSuggestView(APIView):
 _INSPECTABLE_MODELS = {
     "request": TripRequest,
     "feature_request": FeatureRequest,
+    "trip_feedback": TripFeedback,
     "app_user": AppUser,
     "setting": Setting,
 }

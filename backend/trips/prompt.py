@@ -8,6 +8,7 @@ Setting テーブル（プロンプト設定）で管理者が文面を調整で
 from datetime import date, datetime
 
 from . import choices
+from .lodging import describe_lodging
 
 WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -25,7 +26,7 @@ DEFAULT_PROMPT_OUTPUT_ITEMS = (
     "1. 日ごとのタイムスケジュール（時刻・移動手段・移動時間・滞在時間を明記）\n"
     "2. 各スポットのひとことメモ（おすすめポイント、混雑しやすい時間帯など）\n"
     "3. 持ち物リストと、1人あたりの費用のおおよその目安\n"
-    "4. 上記のデザイン指示に沿った、しおりのビジュアル案（レイアウト・配色・使いたい装飾）"
+    "4. 旅の雰囲気に合った、しおりのビジュアル案（レイアウト・配色・使いたい装飾）"
 )
 
 # {period_label} は「2泊3日」「日帰り」などに自動置換される。
@@ -34,7 +35,7 @@ DEFAULT_PROMPT_RULES = (
     "- 移動時間は実際の距離や交通手段をふまえて現実的に見積もる\n"
     "- 「予約済みの予定」の日時は固定して動かさない\n"
     "- NG項目に挙げたものは提案に含めない\n"
-    "- 初日の開始は集合場所、最終日の終了は解散場所に合わせる\n"
+    "- 初日の開始・最終日の終了は、往路・復路の交通手段（集合・解散場所の指定があればそれ）に合わせる\n"
     "- 全体は{period_label}の分量に収める"
 )
 
@@ -61,6 +62,32 @@ def _label(options, value, other_value) -> str:
     if value == choices.OTHER:
         return other_value or "（未入力）"
     return choices.label_of(options, value)
+
+
+def _design_label(options, value, other_value) -> str:
+    """デザイン指示は任意項目。未選択は「おまかせ」として渡す。"""
+    if not value:
+        return "おまかせ（旅の内容に合うものを選んでほしい）"
+    return _label(options, value, other_value)
+
+
+def _transport_line(cleaned: dict, prefix: str, label: str) -> str:
+    """往路/復路の交通手段と予約状況を1行にする。"""
+    transport = cleaned.get(f"{prefix}_transport")
+    reservation = cleaned.get(f"{prefix}_reservation")
+    transport_label = (
+        _label(choices.TRANSPORTS, transport, cleaned.get(f"{prefix}_transport_other")) if transport else "未定"
+    )
+    reservation_label = choices.label_of(choices.RESERVATION_STATUSES, reservation) if reservation else "未定"
+    return f"- {label}: {transport_label}（予約状況: {reservation_label}）"
+
+
+def _period(cleaned: dict) -> tuple:
+    """(泊数, 期間ラベル) を返す。"""
+    date_from = _parse_date(cleaned.get("date_from"))
+    date_to = _parse_date(cleaned.get("date_to"))
+    nights = (date_to - date_from).days if date_from and date_to and date_to >= date_from else 0
+    return nights, ("日帰り" if nights == 0 else f"{nights}泊{nights + 1}日")
 
 
 def _multi_label(options, values, other_value) -> str:
@@ -113,9 +140,14 @@ def build_prompt(cleaned: dict) -> str:
         lines.append(f"- 行先: {cleaned['destination']}")
     lines += [
         f"- 日程: {_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）",
-        f"- 集合場所: {cleaned.get('meeting_place') or '（未定）'}",
-        f"- 解散場所: {cleaned.get('dismissal_place') or '（未定）'}",
+        _transport_line(cleaned, "outbound", "往路の交通手段"),
+        _transport_line(cleaned, "return", "復路の交通手段"),
     ]
+    # 集合・解散場所は任意項目。入力があるときだけ載せる。
+    if cleaned.get("meeting_place"):
+        lines.append(f"- 集合場所: {cleaned['meeting_place']}")
+    if cleaned.get("dismissal_place"):
+        lines.append(f"- 解散場所: {cleaned['dismissal_place']}")
 
     lodgings = cleaned.get("lodgings") or []
     if nights == 0:
@@ -123,7 +155,7 @@ def build_prompt(cleaned: dict) -> str:
     elif lodgings:
         lines.append("- 宿泊:")
         for index, lodging in enumerate(lodgings, start=1):
-            lines.append(f"  - {index}泊目: {lodging}")
+            lines.append(f"  - {index}泊目: {describe_lodging(lodging) or '未定'}")
     else:
         lines.append("- 宿泊: 未定")
 
@@ -138,7 +170,6 @@ def build_prompt(cleaned: dict) -> str:
     lines += [
         "",
         "# 条件",
-        f"- スケジュール感: {_multi_label(choices.SCHEDULE_PACES, cleaned.get('schedule_paces'), cleaned.get('schedule_pace_other'))}",
     ]
 
     rough_plans = cleaned.get("rough_plans") or []
@@ -159,24 +190,14 @@ def build_prompt(cleaned: dict) -> str:
     else:
         lines.append("  - （指定なし）")
 
-    ng_items = cleaned.get("ng_items") or []
-    lines.append("- NG項目（絶対に旅程へ入れないもの）:")
-    lines += _bullets(ng_items, indent="  - ") if ng_items else ["  - （指定なし）"]
-
-    notes = cleaned.get("notes") or []
-    lines.append("- 配慮・共有メモ:")
-    lines += _bullets(notes, indent="  - ") if notes else ["  - （指定なし）"]
-
     free_notes = (cleaned.get("free_notes") or "").strip()
-    lines.append("- 自由記入:")
-    lines.append(f"  {free_notes}" if free_notes else "  （指定なし）")
+    lines.append("- 考慮事項（スケジュール感・NG項目・配慮事項など）:")
+    lines += [f"  {line}" for line in free_notes.splitlines()] if free_notes else ["  （指定なし）"]
 
     lines += [
         "",
-        "# しおりのデザイン指示",
-        f"- デザインテイスト: {_label(choices.DESIGN_TASTES, cleaned.get('design_taste'), cleaned.get('design_taste_other'))}",
-        f"- カラーイメージ: {_label(choices.COLOR_IMAGES, cleaned.get('color_image'), cleaned.get('color_image_other'))}",
-        f"- 出力サイズ（アスペクト比）: {_label(choices.ASPECT_RATIOS, cleaned.get('aspect_ratio'), cleaned.get('aspect_ratio_other'))}",
+        "# しおりの出力サイズ",
+        f"- 出力サイズ（アスペクト比）: {_design_label(choices.ASPECT_RATIOS, cleaned.get('aspect_ratio'), cleaned.get('aspect_ratio_other'))}",
         "",
         "# 出力してほしいもの",
         *output_items.split("\n"),
@@ -185,4 +206,46 @@ def build_prompt(cleaned: dict) -> str:
         *rules.split("\n"),
     ]
 
+    return "\n".join(lines)
+
+
+def build_image_prompt(cleaned: dict) -> str:
+    """画像生成AI向けのプロンプト（しおりの表紙・1枚もののビジュアル用）を生成する。
+
+    行程の細かい時刻表は画像生成AIが苦手なため、ここでは旅の雰囲気・見出し・
+    デザイン指示を中心に組み立てる（詳しい行程は行程表プロンプトの方で作る）。
+    """
+    nights, period_label = _period(cleaned)
+    title = cleaned.get("title") or "旅のしおり"
+    spots = (cleaned.get("must_spots") or []) + (cleaned.get("want_spots") or [])
+
+    lines = [
+        "友達同士の旅行で使う「旅のしおり」の表紙画像を1枚作成してください。",
+        "",
+        "# 画像に入れる文字（正確に表記すること）",
+        f"- タイトル: {title}",
+        f"- 日程: {_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）",
+    ]
+    if cleaned.get("destination"):
+        lines.append(f"- 行先: {cleaned['destination']}")
+
+    lines += ["", "# 旅の雰囲気・モチーフ"]
+    if cleaned.get("theme"):
+        lines.append(f"- テーマ: {cleaned['theme']}")
+    if spots:
+        lines.append(f"- 描き込みたい名所・モチーフ: {'、'.join(spots[:6])}")
+    if not cleaned.get("theme") and not spots:
+        lines.append("- 行先の名所や季節感が伝わるモチーフを自由に選んでください")
+
+    lines += [
+        "",
+        "# デザイン指示",
+        "- テイスト・配色: 旅のテーマや行先の雰囲気に合わせて自由に選んでください",
+        f"- 出力サイズ（アスペクト比）: {_design_label(choices.ASPECT_RATIOS, cleaned.get('aspect_ratio'), cleaned.get('aspect_ratio_other'))}",
+        "",
+        "# 守ってほしいこと",
+        "- 上記「画像に入れる文字」以外の文字は入れない（誤字・架空の文字を避けるため）",
+        "- 文字は読みやすい大きさ・配置にする",
+        "- 実在の人物の顔は描かない",
+    ]
     return "\n".join(lines)

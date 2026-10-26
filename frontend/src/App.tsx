@@ -1,9 +1,9 @@
-import { Link, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 
 import Layout from './components/Layout'
 import AdminSettingsPage from './pages/AdminSettingsPage'
-import ConfirmPage from './pages/ConfirmPage'
 import CreatePage from './pages/CreatePage'
+import FeedbackPage from './pages/FeedbackPage'
 import HomePage from './pages/HomePage'
 import MyTripsPage from './pages/MyTripsPage'
 import RequestsPage from './pages/RequestsPage'
@@ -29,8 +29,10 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/create" element={<CreatePage />} />
-        <Route path="/confirm" element={<ConfirmPage />} />
+        {/* 入力確認はSTEP4に統合した。古いリンク用に作成画面へ戻す。 */}
+        <Route path="/confirm" element={<Navigate to="/create" replace />} />
         <Route path="/trip/:tripId" element={<ResultPage />} />
+        <Route path="/trip/:tripId/feedback" element={<FeedbackPage />} />
         <Route path="/my-trips" element={<MyTripsPage />} />
         <Route path="/requests" element={<RequestsPage />} />
         <Route path="/admin-settings" element={<AdminSettingsPage />} />
