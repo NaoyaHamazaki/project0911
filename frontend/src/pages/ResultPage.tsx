@@ -233,8 +233,10 @@ export default function ResultPage() {
                     {[
                       ...item.must_spots.map((spot) => `MUST：${spot}`),
                       ...item.want_spots.map((spot) => `WANT：${spot}`),
+                      ...(item.spot_notes?.trim() ? [`メモ：${item.spot_notes.trim()}`] : []),
                       ...item.constraints.map((row) => `予約済み：${row.content}`),
                       ...item.rough_plans.flatMap((plan, index) => (plan.trim() ? [`${index + 1}日目：${plan}`] : [])),
+                      ...(item.notes?.trim() ? [`考慮事項・備考：${item.notes.trim()}`] : []),
                     ].join('\n')}
                   </p>
                 </li>

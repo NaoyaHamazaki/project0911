@@ -75,6 +75,7 @@ class TripRequest(models.Model):
     lodgings = models.JSONField("宿泊場所", default=list, blank=True)
     must_spots = models.JSONField("いきたいスポット(MUST)", default=list, blank=True)
     want_spots = models.JSONField("いきたいスポット(WANT)", default=list, blank=True)
+    spot_notes = models.TextField("いきたいところ(自由記述)", blank=True)
 
     # 複数選択可。選択肢は choices.SCHEDULE_PACES のキーのリスト。
     schedule_paces = models.JSONField("スケジュール感", default=list, blank=True)
@@ -84,7 +85,7 @@ class TripRequest(models.Model):
     constraints = models.JSONField("予約済みの予定", default=list, blank=True)
     ng_items = models.JSONField("NG項目", default=list, blank=True)
     notes = models.JSONField("配慮・共有メモ", default=list, blank=True)
-    free_notes = models.TextField("自由入力欄", blank=True)
+    free_notes = models.TextField("考慮事項・備考", blank=True)
     # 参加者へ意見聴取フォーム(/trip/<id>/feedback)を公開するか
     collect_feedback = models.BooleanField("旅行意見聴取", default=False)
 
@@ -181,8 +182,10 @@ class TripContribution(models.Model):
     name = models.CharField("名前", max_length=50)
     must_spots = models.JSONField("いきたいスポット(MUST)", default=list, blank=True)
     want_spots = models.JSONField("いきたいスポット(WANT)", default=list, blank=True)
+    spot_notes = models.TextField("いきたいところ(自由記述)", blank=True)
     constraints = models.JSONField("予約済みの予定", default=list, blank=True)
     rough_plans = models.JSONField("ざっくり決まっている予定", default=list, blank=True)
+    notes = models.TextField("考慮事項・備考", blank=True)
     created_at = models.DateTimeField("投稿日時", auto_now_add=True)
 
     class Meta:

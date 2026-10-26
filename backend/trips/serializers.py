@@ -22,7 +22,7 @@ class TripRequestSerializer(serializers.ModelSerializer):
             "outbound_transport", "outbound_transport_other", "outbound_reservation",
             "return_transport", "return_transport_other", "return_reservation",
             "meeting_place", "dismissal_place", "lodgings",
-            "must_spots", "want_spots",
+            "must_spots", "want_spots", "spot_notes",
             "schedule_paces", "schedule_pace_other", "schedule_paces_label",
             "rough_plans", "constraints", "ng_items", "notes", "free_notes", "collect_feedback",
             "image_enabled", "image_mood", "join_key",
@@ -87,4 +87,4 @@ class TripFeedbackSerializer(serializers.ModelSerializer):
 class TripContributionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TripContribution
-        fields = ["id", "name", "must_spots", "want_spots", "constraints", "rough_plans", "created_at"]
+        fields = ["id", "name", "must_spots", "want_spots", "spot_notes", "constraints", "rough_plans", "notes", "created_at"]

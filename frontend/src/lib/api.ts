@@ -117,7 +117,15 @@ export const api = {
 
   sendContribution: (
     joinKey: string,
-    payload: { name: string; must_spots: string[]; want_spots: string[]; constraints: Constraint[]; rough_plans: string[] },
+    payload: {
+      name: string
+      must_spots: string[]
+      want_spots: string[]
+      spot_notes: string
+      constraints: Constraint[]
+      rough_plans: string[]
+      notes: string
+    },
   ) =>
     request<Contribution>(`/api/join/${encodeURIComponent(joinKey)}/`, {
       method: 'POST',

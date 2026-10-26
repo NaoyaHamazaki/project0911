@@ -6,7 +6,9 @@ type SpotProps = {
   contributions: Contribution[]
   must: string[]
   want: string[]
+  spotNotes: string
   onAdopt: (field: 'must_spots' | 'want_spots', value: string) => void
+  onAdoptSpotNotes: (value: string) => void
 }
 
 type PlanProps = {
@@ -14,12 +16,30 @@ type PlanProps = {
   contributions: Contribution[]
   constraints: Constraint[]
   roughPlans: string[]
+  notes: string
   onAdoptConstraint: (value: Constraint) => void
+  onAdoptNotes: (value: string) => void
   onAdoptRoughPlan: (dayIndex: number, value: string) => void
 }
 
 const sameConstraint = (a: Constraint, b: Constraint) =>
   a.content.trim() === b.content.trim() && a.date === b.date && a.time === b.time
+
+function TextItem({ tag, text, adopted, onAdopt }: { tag: string; text: string; adopted: boolean; onAdopt: () => void }) {
+  return (
+    <li className="contrib__item">
+      <span className="contrib__tag">{tag}</span>
+      <span className="contrib__text">{text}</span>
+      {adopted ? (
+        <span className="contrib__done">取り込み済み</span>
+      ) : (
+        <button type="button" className="field-shortcut" onClick={onAdopt}>
+          取り込む
+        </button>
+      )}
+    </li>
+  )
+}
 
 function constraintText(row: Constraint) {
   return [row.date ? formatDate(row.date) : '', row.time, row.content].filter(Boolean).join(' ')
@@ -32,8 +52,8 @@ function constraintText(row: Constraint) {
 export default function ContributionPanel(props: SpotProps | PlanProps) {
   const rows = props.contributions.filter((item) =>
     props.kind === 'spots'
-      ? item.must_spots.length > 0 || item.want_spots.length > 0
-      : item.constraints.length > 0 || item.rough_plans.some((plan) => plan.trim()),
+      ? item.must_spots.length > 0 || item.want_spots.length > 0 || Boolean(item.spot_notes?.trim())
+      : item.constraints.length > 0 || item.rough_plans.some((plan) => plan.trim()) || Boolean(item.notes?.trim()),
   )
   if (rows.length === 0) return null
 
@@ -63,6 +83,14 @@ export default function ContributionPanel(props: SpotProps | PlanProps) {
                       </li>
                     )
                   }),
+                )}
+                {item.spot_notes?.trim() && (
+                  <TextItem
+                    tag="メモ"
+                    text={item.spot_notes.trim()}
+                    adopted={props.spotNotes.includes(item.spot_notes.trim())}
+                    onAdopt={() => props.onAdoptSpotNotes(item.spot_notes.trim())}
+                  />
                 )}
               </>
             ) : (
@@ -107,6 +135,14 @@ export default function ContributionPanel(props: SpotProps | PlanProps) {
                     </li>
                   )
                 })}
+                {item.notes?.trim() && (
+                  <TextItem
+                    tag="考慮事項・備考"
+                    text={item.notes.trim()}
+                    adopted={props.notes.includes(item.notes.trim())}
+                    onAdopt={() => props.onAdoptNotes(item.notes.trim())}
+                  />
+                )}
               </>
             )}
           </ul>

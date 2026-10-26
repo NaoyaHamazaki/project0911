@@ -142,6 +142,21 @@ class GeneralSettingsView(APIView):
         return Response(self._payload())
 
 
+def _contributions_of(trip) -> list:
+    """プロンプトに載せる参加者の意見（意見募集リンクからの追記）。"""
+    return list(trip.contributions.values(
+        "name", "must_spots", "want_spots", "spot_notes", "constraints", "rough_plans", "notes",
+    ))
+
+
+def _rebuild_prompts(trip) -> None:
+    """保存済みの旅のプロンプトを作り直す（参加者から意見が届いたとき用）。"""
+    cleaned = validators.normalize(TripRequestSerializer(trip).data)
+    trip.prompt_text = prompt_builder.build_prompt(cleaned, _contributions_of(trip))
+    trip.image_prompt_text = _image_prompt(cleaned)
+    trip.save(update_fields=["prompt_text", "image_prompt_text", "updated_at"])
+
+
 def _image_prompt(cleaned: dict) -> str:
     """出力設定で「画像も出力する」をONにした旅だけ、画像生成用プロンプトを作る。"""
     return prompt_builder.build_image_prompt(cleaned) if cleaned.get("image_enabled") else ""
@@ -218,7 +233,7 @@ class TripDetailView(APIView):
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
         cleaned.pop("device_key", None)  # 所有者(端末)は編集で変えない
-        cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
+        cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned, _contributions_of(trip))
         cleaned["image_prompt_text"] = _image_prompt(cleaned)
         for key, value in cleaned.items():
             setattr(trip, key, value)
@@ -283,6 +298,9 @@ class JoinView(APIView):
             "nights": trip.nights,
             "days": trip.days,
             "lodgings": [describe_lodging(item) for item in normalize_lodgings(trip.lodgings, trip.nights)],
+            # 参加者ページでもAIのおすすめ候補を出せるよう、宿泊先の元データも返す。
+            "lodging_items": normalize_lodgings(trip.lodgings, trip.nights),
+            "spot_suggest_enabled": spots.is_enabled(),
         })
 
     def post(self, request, join_key):
@@ -293,6 +311,8 @@ class JoinView(APIView):
         if errors:
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
         row = TripContribution.objects.create(trip=trip, **cleaned)
+        # 意見と矛盾点メモの指示をプロンプトに反映するため、その場で作り直す。
+        _rebuild_prompts(trip)
         return Response(TripContributionSerializer(row).data, status=status.HTTP_201_CREATED)
 
 

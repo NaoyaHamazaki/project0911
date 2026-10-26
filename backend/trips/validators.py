@@ -151,6 +151,7 @@ def normalize(data: dict) -> dict:
         "lodgings": normalize_lodgings(data.get("lodgings"), _nights_of(data)),
         "must_spots": _as_text_list(data.get("must_spots")),
         "want_spots": _as_text_list(data.get("want_spots")),
+        "spot_notes": _as_text(data.get("spot_notes"))[:2000],
         # スケジュール感・NG項目・配慮メモ・テイスト・カラーは入力欄を廃止した。
         "schedule_paces": [],
         "schedule_pace_other": "",
@@ -262,6 +263,8 @@ def normalize_and_validate_contribution(data: dict, days: int) -> tuple:
         "name": _as_text(data.get("name"))[:50],
         "must_spots": _as_text_list(data.get("must_spots"))[:MAX_LIST_ITEMS],
         "want_spots": _as_text_list(data.get("want_spots"))[:MAX_LIST_ITEMS],
+        "spot_notes": _as_text(data.get("spot_notes"))[:1000],
+        "notes": _as_text(data.get("notes"))[:1000],
         "constraints": _normalize_constraints(data.get("constraints"))[:MAX_LIST_ITEMS],
         # 日ごとの入力。空欄の日も位置を保つため、そのまま日数ぶんに切りそろえる。
         "rough_plans": [_as_text(item)[:MAX_TEXT_LENGTH] for item in (data.get("rough_plans") or [])][:days],
@@ -271,9 +274,10 @@ def normalize_and_validate_contribution(data: dict, days: int) -> tuple:
         errors.append({"field": "name", "message": "名前を入力してください。"})
     has_content = (
         cleaned["must_spots"] or cleaned["want_spots"] or cleaned["constraints"] or any(cleaned["rough_plans"])
+        or cleaned["spot_notes"] or cleaned["notes"]
     )
     if not has_content:
-        errors.append({"field": "must_spots", "message": "いきたいところか予定を1つ以上入力してください。"})
+        errors.append({"field": "must_spots", "message": "いきたいところ・予定・考慮事項のどれかを入力してください。"})
     for field in ("must_spots", "want_spots"):
         if any(len(item) > MAX_TEXT_LENGTH for item in cleaned[field]):
             errors.append({"field": field, "message": f"{MAX_TEXT_LENGTH}文字以内で入力してください。"})

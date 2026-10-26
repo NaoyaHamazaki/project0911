@@ -32,7 +32,7 @@ import {
 
 // 序盤の入力の負担感を減らすため、1ページの入力量を絞って5ステップに分けている。
 // 最後のステップのあとに「入力内容の確認」ページ（CONFIRM_STEP）がある。
-const STEP_LABELS = ['旅の基本', '宿泊先', 'いきたいところ', '予定', '出力設定']
+const STEP_LABELS = ['旅の基本', '宿泊先', 'いきたいところ（場所）', '予定', '出力設定']
 const LAST_INPUT_STEP = STEP_LABELS.length - 1
 const CONFIRM_STEP = STEP_LABELS.length
 
@@ -47,6 +47,7 @@ const FIELD_STEP: Record<string, number> = {
   lodgings: 1,
   must_spots: 2,
   want_spots: 2,
+  spot_notes: 2,
   rough_plans: 3,
   constraints: 3,
   free_notes: 3,
@@ -56,6 +57,9 @@ const FIELD_STEP: Record<string, number> = {
 }
 
 const filled = (values: string[]) => values.map((value) => value.trim()).filter(Boolean)
+
+// 参加者の自由記述を取り込むとき、既存の文章の下に1行足す。
+const appendText = (current: string, text: string) => (current.trim() ? `${current.trim()}\n${text}` : text)
 
 // 画像のテーマの選択肢。選ぶと自由入力欄にその文言が入る（自由入力もそのまま使える）。
 const IMAGE_MOODS = ['水彩・手描き風', 'レトロなポスター風', 'ポップでカラフル', 'シンプル・ミニマル', '写真風・リアル']
@@ -482,7 +486,7 @@ export default function CreatePage() {
         {step === 2 && (
           <section className="card">
             <div className="card__header">
-              <h2 className="card__title">いきたいところ</h2>
+              <h2 className="card__title">いきたいところ（場所）</h2>
               <div className="card__header-actions">
                 <button
                   type="button"
@@ -523,11 +527,27 @@ export default function CreatePage() {
               />
             </div>
 
+            <div className="field">
+              <label className="field__label" htmlFor="spot-notes">
+                自由記述
+              </label>
+              <p className="field__hint">場所が決まっていない希望や、いきたいところについてのメモ。</p>
+              <textarea
+                id="spot-notes"
+                className="input textarea"
+                value={form.spot_notes}
+                placeholder="例）どこかで抹茶スイーツを食べたい／夜景が見える場所に行きたい"
+                onChange={(event) => update('spot_notes', event.target.value)}
+              />
+            </div>
+
             <ContributionPanel
               kind="spots"
               contributions={contributions}
               must={filled(form.must_spots)}
               want={filled(form.want_spots)}
+              spotNotes={form.spot_notes}
+              onAdoptSpotNotes={(text) => update('spot_notes', appendText(form.spot_notes, text))}
               onAdopt={addSpot}
             />
 
@@ -594,6 +614,8 @@ export default function CreatePage() {
               contributions={contributions}
               constraints={form.constraints}
               roughPlans={form.rough_plans}
+              notes={form.free_notes}
+              onAdoptNotes={(text) => update('free_notes', appendText(form.free_notes, text))}
               onAdoptConstraint={(row) => update('constraints', [...form.constraints, row])}
               onAdoptRoughPlan={(index, text) => {
                 const next = [...form.rough_plans]
@@ -604,7 +626,7 @@ export default function CreatePage() {
 
             <div className="field">
               <label className="field__label" htmlFor="free-notes">
-                考慮事項
+                考慮事項・備考
               </label>
               <p className="field__hint">スケジュール感、NG項目、配慮事項など考慮事項</p>
               <textarea

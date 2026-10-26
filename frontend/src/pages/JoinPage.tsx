@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import ConstraintInputs from '../components/ConstraintInputs'
 import ErrorPanel from '../components/ErrorPanel'
 import RepeatableInputs from '../components/RepeatableInputs'
+import SpotSuggestions from '../components/SpotSuggestions'
 import { AppError, BusinessError, api } from '../lib/api'
 import { formatPeriod } from '../lib/format'
 import type { Constraint, FieldError, JoinInfo } from '../lib/types'
@@ -25,6 +26,8 @@ export default function JoinPage() {
   const [nameEntered, setNameEntered] = useState(false)
   const [mustSpots, setMustSpots] = useState<string[]>([''])
   const [wantSpots, setWantSpots] = useState<string[]>([''])
+  const [spotNotes, setSpotNotes] = useState('')
+  const [notes, setNotes] = useState('')
   const [constraints, setConstraints] = useState<Constraint[]>([])
   const [roughPlans, setRoughPlans] = useState<string[]>([])
   const [sending, setSending] = useState(false)
@@ -64,6 +67,8 @@ export default function JoinPage() {
   const resetInputs = () => {
     setMustSpots([''])
     setWantSpots([''])
+    setSpotNotes('')
+    setNotes('')
     setConstraints([])
     setRoughPlans(Array.from({ length: info?.days ?? 0 }, () => ''))
   }
@@ -78,8 +83,10 @@ export default function JoinPage() {
         name: name.trim(),
         must_spots: mustSpots.map((value) => value.trim()).filter(Boolean),
         want_spots: wantSpots.map((value) => value.trim()).filter(Boolean),
+        spot_notes: spotNotes.trim(),
         constraints: constraints.filter((row) => row.content.trim()),
         rough_plans: roughPlans,
+        notes: notes.trim(),
       })
       setSent(true)
       resetInputs()
@@ -110,10 +117,19 @@ export default function JoinPage() {
   }
 
   const filledLodgings = info.lodgings.filter(Boolean)
+  const filledSpots = (values: string[]) => values.map((value) => value.trim()).filter(Boolean)
+
+  // AIのおすすめ候補から MUST/WANT に追加する（重複は追加しない）。
+  const addSpot = (field: 'must_spots' | 'want_spots', name: string) => {
+    const [values, setValues] = field === 'must_spots' ? [mustSpots, setMustSpots] : [wantSpots, setWantSpots]
+    const current = filledSpots(values)
+    if (current.includes(name) || current.length >= MAX_ITEMS) return
+    setValues([...current, name])
+  }
 
   return (
     <div className="page">
-      <h1 className="page__title">旅のいきたいところを教えてください</h1>
+      <h1 className="page__title">旅のいきたいところ（場所）を教えてください</h1>
 
       <section className="card card--trip">
         <p className="trip-meta__title">{info.title}</p>
@@ -170,7 +186,7 @@ export default function JoinPage() {
 
           <form className="form" onSubmit={handleSubmit} noValidate>
             <section className="card">
-              <h2 className="card__title">いきたいところ</h2>
+              <h2 className="card__title">いきたいところ（場所）</h2>
               <p className="field__hint">{name}さんとして追記します。</p>
               <div className="field">
                 <span className="field__label">MUST</span>
@@ -194,6 +210,31 @@ export default function JoinPage() {
                   max={MAX_ITEMS}
                 />
               </div>
+              <div className="field">
+                <label className="field__label" htmlFor="join-spot-notes">
+                  自由記述
+                </label>
+                <p className="field__hint">場所が決まっていない希望や、いきたいところについてのメモ。</p>
+                <textarea
+                  id="join-spot-notes"
+                  className="input textarea"
+                  value={spotNotes}
+                  maxLength={1000}
+                  placeholder="例）どこかで抹茶スイーツを食べたい"
+                  onChange={(event) => setSpotNotes(event.target.value)}
+                />
+              </div>
+              {info.spot_suggest_enabled && (
+                <SpotSuggestions
+                  theme={info.theme}
+                  destination={info.destination}
+                  lodgings={info.lodging_items}
+                  dateFrom={info.date_from}
+                  dateTo={info.date_to}
+                  added={{ must: filledSpots(mustSpots), want: filledSpots(wantSpots) }}
+                  onAdd={addSpot}
+                />
+              )}
             </section>
 
             <section className="card">
@@ -234,6 +275,20 @@ export default function JoinPage() {
                   </div>
                 </div>
               )}
+              <div className="field">
+                <label className="field__label" htmlFor="join-notes">
+                  考慮事項・備考
+                </label>
+                <p className="field__hint">スケジュール感、NG項目、配慮事項など考慮事項</p>
+                <textarea
+                  id="join-notes"
+                  className="input textarea"
+                  value={notes}
+                  maxLength={1000}
+                  placeholder="例）朝早いのは苦手／甲殻類アレルギーがあります"
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+              </div>
             </section>
 
             <p className="field__hint">送信した内容はあとから編集できません。取り込むかどうかは幹事さんが決めます。</p>

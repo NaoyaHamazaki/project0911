@@ -118,8 +118,11 @@ def _prompt_settings() -> tuple:
     return intro, output_items, rules
 
 
-def build_prompt(cleaned: dict) -> str:
-    """正規化済みの入力からプロンプト本文を生成する。"""
+def build_prompt(cleaned: dict, contributions=None) -> str:
+    """正規化済みの入力からプロンプト本文を生成する。
+
+    contributions は意見募集リンクから届いた参加者の追記（dictのリスト）。
+    """
     date_from = _parse_date(cleaned.get("date_from"))
     date_to = _parse_date(cleaned.get("date_to"))
     nights = (date_to - date_from).days if date_from and date_to and date_to >= date_from else 0
@@ -167,6 +170,10 @@ def build_prompt(cleaned: dict) -> str:
     lines += _bullets(must_spots) if must_spots else ["- （指定なし）"]
     lines.append("## WANT（時間に余裕があれば組み込む）")
     lines += _bullets(want_spots) if want_spots else ["- （指定なし）"]
+    spot_notes = (cleaned.get("spot_notes") or "").strip()
+    if spot_notes:
+        lines.append("## いきたいところについてのメモ")
+        lines += [f"- {line}" for line in spot_notes.splitlines() if line.strip()]
 
     lines += [
         "",
@@ -192,7 +199,7 @@ def build_prompt(cleaned: dict) -> str:
         lines.append("  - （指定なし）")
 
     free_notes = (cleaned.get("free_notes") or "").strip()
-    lines.append("- 考慮事項（スケジュール感・NG項目・配慮事項など）:")
+    lines.append("- 考慮事項・備考（スケジュール感・NG項目・配慮事項など）:")
     lines += [f"  {line}" for line in free_notes.splitlines()] if free_notes else ["  （指定なし）"]
 
     lines += [
@@ -206,8 +213,60 @@ def build_prompt(cleaned: dict) -> str:
         "# 守ってほしいこと",
         *rules.split("\n"),
     ]
+    lines += _contribution_lines(contributions or [])
 
     return "\n".join(lines)
+
+
+def _contribution_lines(contributions: list) -> list:
+    """一緒に行く人から届いた意見と、矛盾があったときの扱いを指示する部分。
+
+    幹事が取り込まなかった意見も参考として載せ、幹事の条件と食い違う点は
+    出力の最後に「矛盾点メモ」として必ず残すよう指示する。プロンプト自体に書いておくので、
+    このプロンプトをどの生成AIに渡してもメモが残る。
+    """
+    rows = [item for item in contributions if _has_contribution(item)]
+    if not rows:
+        return []
+    lines = ["", "# 一緒に行く人からの意見（参考）", "幹事が上記の条件にまとめる前の、参加者ごとの意見です。"]
+    for item in rows:
+        lines.append(f"## {item.get('name') or '名無し'}さん")
+        for spot in item.get("must_spots") or []:
+            lines.append(f"- いきたい（MUST）: {spot}")
+        for spot in item.get("want_spots") or []:
+            lines.append(f"- いきたい（WANT）: {spot}")
+        if (item.get("spot_notes") or "").strip():
+            lines.append(f"- いきたいところのメモ: {_one_line(item['spot_notes'])}")
+        for row in item.get("constraints") or []:
+            when = " ".join(part for part in [_format_date(row.get("date")) if row.get("date") else "", row.get("time") or ""] if part)
+            lines.append(f"- 予約済みの予定: {(when + ' ') if when else ''}{row.get('content', '')}".rstrip())
+        for index, plan in enumerate(item.get("rough_plans") or [], start=1):
+            if (plan or "").strip():
+                lines.append(f"- {index}日目にしたいこと: {_one_line(plan)}")
+        if (item.get("notes") or "").strip():
+            lines.append(f"- 考慮事項・備考: {_one_line(item['notes'])}")
+    lines += [
+        "",
+        "# 意見どうしの矛盾について（必ず守ること）",
+        "- 上記「旅の基本情報」〜「条件」（幹事の入力）と参加者の意見が食い違う場合は、幹事の入力を優先する",
+        "- 参加者どうし、または参加者と幹事の入力の間に矛盾・競合（行きたい場所とNG項目、予定の時間の重なり、"
+        "移動が間に合わない組み合わせなど）があれば、出力の最後に「矛盾点メモ」という見出しを作り、"
+        "誰のどの意見と何が食い違ったか、旅程ではどう扱ったか（採用・調整・見送り）を箇条書きで必ず残す",
+        "- 矛盾が無い場合も「矛盾点メモ：なし」と明記する",
+    ]
+    return lines
+
+
+def _has_contribution(item: dict) -> bool:
+    return bool(
+        item.get("must_spots") or item.get("want_spots") or item.get("constraints")
+        or any((plan or "").strip() for plan in item.get("rough_plans") or [])
+        or (item.get("spot_notes") or "").strip() or (item.get("notes") or "").strip()
+    )
+
+
+def _one_line(text: str) -> str:
+    return " ".join(part.strip() for part in str(text).splitlines() if part.strip())
 
 
 def build_image_prompt(cleaned: dict) -> str:

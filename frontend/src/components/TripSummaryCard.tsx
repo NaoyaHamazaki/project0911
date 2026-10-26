@@ -71,6 +71,7 @@ export default function TripSummaryCard({ form, options }: { form: TripForm; opt
         </SummaryRow>
         <SummaryRow label="MUSTスポット"><ListValue items={form.must_spots} /></SummaryRow>
         <SummaryRow label="WANTスポット"><ListValue items={form.want_spots} /></SummaryRow>
+        {form.spot_notes.trim() && <SummaryRow label="いきたいところのメモ">{form.spot_notes}</SummaryRow>}
         <SummaryRow label="ざっくり決まっている予定">
           <ListValue items={form.rough_plans.map((p, i) => (p ? `${i + 1}日目：${p}` : ''))} />
         </SummaryRow>
@@ -81,7 +82,7 @@ export default function TripSummaryCard({ form, options }: { form: TripForm; opt
             )}
           />
         </SummaryRow>
-        <SummaryRow label="考慮事項"><Text value={form.free_notes} empty="指定なし" /></SummaryRow>
+        <SummaryRow label="考慮事項・備考"><Text value={form.free_notes} empty="指定なし" /></SummaryRow>
         <SummaryRow label="画像出力">{form.image_enabled ? 'する' : 'しない'}</SummaryRow>
         {form.image_enabled && (
           <>

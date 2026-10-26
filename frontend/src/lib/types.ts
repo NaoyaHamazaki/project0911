@@ -76,6 +76,8 @@ export type TripForm = {
   lodgings: Lodging[]
   must_spots: string[]
   want_spots: string[]
+  /** いきたいところの自由記述 */
+  spot_notes: string
   schedule_paces: string[]
   schedule_pace_other: string
   rough_plans: string[]
@@ -175,6 +177,7 @@ export function tripToForm(trip: Trip): TripForm {
     lodgings: (trip.lodgings ?? []).map(normalizeLodging),
     must_spots: trip.must_spots.length > 0 ? trip.must_spots : [''],
     want_spots: trip.want_spots.length > 0 ? trip.want_spots : [''],
+    spot_notes: trip.spot_notes ?? '',
     // スケジュール感・NG項目・配慮メモは入力欄を廃止し、自由入力欄へまとめて表示する。
     schedule_paces: [],
     schedule_pace_other: '',
@@ -212,6 +215,7 @@ export const emptyTripForm = (): TripForm => ({
   lodgings: [],
   must_spots: [''],
   want_spots: [''],
+  spot_notes: '',
   schedule_paces: [],
   schedule_pace_other: '',
   rough_plans: [],
@@ -236,8 +240,11 @@ export type Contribution = {
   name: string
   must_spots: string[]
   want_spots: string[]
+  spot_notes: string
   constraints: Constraint[]
   rough_plans: string[]
+  /** 考慮事項・備考 */
+  notes: string
   created_at: string
 }
 
@@ -251,6 +258,9 @@ export type JoinInfo = {
   nights: number
   days: number
   lodgings: string[]
+  /** AIのおすすめ候補に渡す宿泊先の元データ */
+  lodging_items: Lodging[]
+  spot_suggest_enabled: boolean
 }
 
 /** いきたいスポットのAI候補 */
