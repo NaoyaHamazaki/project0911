@@ -4,13 +4,23 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import choices, consistency
+from . import choices, consistency, spots
 from . import prompt as prompt_builder
 from . import providers, validators
-from .models import AppUser, FeatureRequest, Setting, TripFeedback, TripRequest, generate_trip_id
+from .lodging import describe_lodging, normalize_lodgings
+from .models import (
+    AppUser,
+    FeatureRequest,
+    Setting,
+    TripContribution,
+    TripFeedback,
+    TripRequest,
+    generate_join_key,
+    generate_trip_id,
+)
 from .serializers import (
     FeatureRequestSerializer,
-    TripFeedbackSerializer,
+    TripContributionSerializer,
     TripRequestSerializer,
     TripRequestSummarySerializer,
 )
@@ -54,6 +64,7 @@ class OptionsView(APIView):
             "max_trip_days": validators.MAX_TRIP_DAYS,
             "max_list_items": validators.MAX_LIST_ITEMS,
             "place_suggest_enabled": provider.enabled,
+            "spot_suggest_enabled": spots.is_enabled(),
             "admin_menu_enabled": settings.ADMIN_MENU_ENABLED,
         })
 
@@ -131,6 +142,11 @@ class GeneralSettingsView(APIView):
         return Response(self._payload())
 
 
+def _image_prompt(cleaned: dict) -> str:
+    """出力設定で「画像も出力する」をONにした旅だけ、画像生成用プロンプトを作る。"""
+    return prompt_builder.build_image_prompt(cleaned) if cleaned.get("image_enabled") else ""
+
+
 class TripValidateView(APIView):
     """確認ページ用。保存せずにビジネスエラーの確認とプロンプトの試作を行う。"""
 
@@ -142,7 +158,7 @@ class TripValidateView(APIView):
         return Response({
             "errors": [],
             "prompt_text": prompt_builder.build_prompt(cleaned),
-            "image_prompt_text": prompt_builder.build_image_prompt(cleaned),
+            "image_prompt_text": _image_prompt(cleaned),
             "consistency_warnings": concerns,
         })
 
@@ -162,7 +178,7 @@ class TripListCreateView(APIView):
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
         cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
-        cleaned["image_prompt_text"] = prompt_builder.build_image_prompt(cleaned)
+        cleaned["image_prompt_text"] = _image_prompt(cleaned)
         trip = TripRequest.objects.create(trip_id=generate_trip_id(), **cleaned)
         return Response(TripRequestSerializer(trip).data, status=status.HTTP_201_CREATED)
 
@@ -203,52 +219,101 @@ class TripDetailView(APIView):
 
         cleaned.pop("device_key", None)  # 所有者(端末)は編集で変えない
         cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
-        cleaned["image_prompt_text"] = prompt_builder.build_image_prompt(cleaned)
+        cleaned["image_prompt_text"] = _image_prompt(cleaned)
         for key, value in cleaned.items():
             setattr(trip, key, value)
         trip.save()
         return Response(TripRequestSerializer(trip).data)
 
 
-class TripFeedbackView(APIView):
-    """旅行意見聴取。参加者はログイン不要で意見を送り、主催者は一覧を読む。
+def _find_trip(trip_id):
+    return TripRequest.objects.filter(trip_id=trip_id.strip().upper()).first()
 
-    主催者が「意見を聞く」をONにした旅だけ受け付ける。寄せられた意見は
-    MUST/WANT等へ自動反映せず、主催者が読んで手動で反映する運用。
-    """
 
-    def _trip(self, trip_id):
-        return TripRequest.objects.filter(trip_id=trip_id.strip().upper()).first()
+def _not_found():
+    return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
 
-    def get(self, request, trip_id):
-        trip = self._trip(trip_id)
-        if trip is None:
-            return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
-        return Response({
-            "trip_id": trip.trip_id,
-            "title": trip.title,
-            "date_from": trip.date_from,
-            "date_to": trip.date_to,
-            "destination": trip.destination,
-            "open": trip.collect_feedback,
-            "results": TripFeedbackSerializer(trip.feedbacks.all()[:200], many=True).data,
-        })
+
+class TripJoinKeyView(APIView):
+    """意見募集リンクのキーを返す（未発行なら発行する）。旅IDを知っている親ユーザー向け。"""
 
     def post(self, request, trip_id):
-        trip = self._trip(trip_id)
+        trip = _find_trip(trip_id)
         if trip is None:
-            return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
-        if not trip.collect_feedback:
+            return _not_found()
+        if not trip.join_key:
+            trip.join_key = generate_join_key()
+            trip.save(update_fields=["join_key", "updated_at"])
+        return Response({"join_key": trip.join_key})
+
+
+class TripContributionListView(APIView):
+    """親ユーザー向け。参加者から届いた追記の一覧。"""
+
+    def get(self, request, trip_id):
+        trip = _find_trip(trip_id)
+        if trip is None:
+            return _not_found()
+        rows = trip.contributions.all()[:200]
+        return Response({"join_key": trip.join_key, "results": TripContributionSerializer(rows, many=True).data})
+
+
+class JoinView(APIView):
+    """参加者向け（意見募集リンク /join/<key>）。旅の確定情報を見て、いきたいところ・予定を追記する。
+
+    旅IDは返さない（参加者が再編集画面に入れないようにするため）。
+    """
+
+    def _trip(self, join_key):
+        key = (join_key or "").strip()
+        if not key:
+            return None
+        return TripRequest.objects.filter(join_key=key).first()
+
+    def get(self, request, join_key):
+        trip = self._trip(join_key)
+        if trip is None:
+            return Response({"detail": "この意見募集リンクは見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            "title": trip.title,
+            "theme": trip.theme,
+            "destination": trip.destination,
+            "date_from": trip.date_from,
+            "date_to": trip.date_to,
+            "nights": trip.nights,
+            "days": trip.days,
+            "lodgings": [describe_lodging(item) for item in normalize_lodgings(trip.lodgings, trip.nights)],
+        })
+
+    def post(self, request, join_key):
+        trip = self._trip(join_key)
+        if trip is None:
+            return Response({"detail": "この意見募集リンクは見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
+        cleaned, errors = validators.normalize_and_validate_contribution(request.data or {}, trip.days)
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+        row = TripContribution.objects.create(trip=trip, **cleaned)
+        return Response(TripContributionSerializer(row).data, status=status.HTTP_201_CREATED)
+
+
+class SpotSuggestView(APIView):
+    """テーマ・行先・宿泊先から、いきたいスポットの候補を返す（Gemini）。"""
+
+    def post(self, request):
+        payload = request.data or {}
+        theme = str(payload.get("theme") or "").strip()[:200]
+        destination = str(payload.get("destination") or "").strip()[:200]
+        lodgings = normalize_lodgings(payload.get("lodgings"), validators.MAX_TRIP_DAYS)
+        lodgings = [item for item in lodgings if item.get("mode")]
+        exclude = [str(item).strip()[:100] for item in (payload.get("exclude") or []) if str(item).strip()][:50]
+        if not spots.is_enabled():
+            return Response({"enabled": False, "results": []})
+        if not destination and not any(item.get("value") for item in lodgings):
             return Response(
-                {"errors": [{"field": "body", "message": "この旅では現在、意見を受け付けていません。"}]},
+                {"errors": [{"field": "destination", "message": "行先か宿泊先を入力すると候補を出せます。"}]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = TripFeedbackSerializer(data=request.data or {})
-        if not serializer.is_valid():
-            errors = [{"field": f, "message": m[0]} for f, m in serializer.errors.items()]
-            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
-        serializer.save(trip=trip)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response({"enabled": True, "results": spots.suggest_spots(theme, destination, lodgings, exclude)})
 
 
 class FeatureRequestListCreateView(APIView):
@@ -290,6 +355,7 @@ _INSPECTABLE_MODELS = {
     "request": TripRequest,
     "feature_request": FeatureRequest,
     "trip_feedback": TripFeedback,
+    "trip_contribution": TripContribution,
     "app_user": AppUser,
     "setting": Setting,
 }

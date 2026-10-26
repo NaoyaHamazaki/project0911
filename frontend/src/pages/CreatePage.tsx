@@ -1,21 +1,40 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import AddressInput from '../components/AddressInput'
 import ChoiceField from '../components/ChoiceField'
 import ConstraintInputs from '../components/ConstraintInputs'
+import ContributionPanel from '../components/ContributionPanel'
 import ErrorPanel from '../components/ErrorPanel'
+import JoinLinkModal from '../components/JoinLinkModal'
 import LodgingInputs from '../components/LodgingInputs'
 import RepeatableInputs from '../components/RepeatableInputs'
+import SpotSuggestions from '../components/SpotSuggestions'
 import TripSummaryCard from '../components/TripSummaryCard'
 import { AppError, BusinessError, api } from '../lib/api'
 import { nightsBetween } from '../lib/format'
-import { clearDraft, getDeviceKey, getEditingTripId, loadDraft, saveDraft, stopEditing } from '../lib/storage'
-import { emptyLodging, emptyTripForm, type FieldError, type Options, type TripForm } from '../lib/types'
+import {
+  clearDraft,
+  getDeviceKey,
+  getEditingTripId,
+  loadDraft,
+  saveDraft,
+  startEditing,
+  stopEditing,
+} from '../lib/storage'
+import {
+  emptyLodging,
+  emptyTripForm,
+  type Contribution,
+  type FieldError,
+  type Options,
+  type TripForm,
+} from '../lib/types'
 
-// 一度に入力する量を減らすため、フォームを4ステップに分けている。
-const STEP_LABELS = ['旅の基本と往路・復路', '滞在場所決め', 'いきたいところ・条件', '最終調整と出力']
-const LAST_STEP = STEP_LABELS.length - 1
+// 序盤の入力の負担感を減らすため、1ページの入力量を絞って5ステップに分けている。
+// 最後のステップのあとに「入力内容の確認」ページ（CONFIRM_STEP）がある。
+const STEP_LABELS = ['旅の基本', '宿泊先', 'いきたいところ', '予定', '出力設定']
+const LAST_INPUT_STEP = STEP_LABELS.length - 1
+const CONFIRM_STEP = STEP_LABELS.length
 
 // サーバーから返るビジネスエラーのfield名から、それが属するステップを引く。
 // エラーが出たとき、該当ステップまで自動で戻すために使う。
@@ -25,34 +44,18 @@ const FIELD_STEP: Record<string, number> = {
   destination: 0,
   date_from: 0,
   date_to: 0,
-  outbound_transport: 0,
-  outbound_transport_other: 0,
-  outbound_reservation: 0,
-  return_transport: 0,
-  return_transport_other: 0,
-  return_reservation: 0,
-  meeting_place: 0,
-  dismissal_place: 0,
   lodgings: 1,
   must_spots: 2,
   want_spots: 2,
-  schedule_paces: 2,
-  schedule_pace_other: 2,
-  rough_plans: 2,
-  constraints: 2,
-  ng_items: 2,
-  notes: 2,
-  free_notes: 2,
-  design_taste: 3,
-  design_taste_other: 3,
-  color_image: 3,
-  color_image_other: 3,
-  aspect_ratio: 3,
-  aspect_ratio_other: 3,
+  rough_plans: 3,
+  constraints: 3,
+  free_notes: 3,
+  image_mood: 4,
+  aspect_ratio: 4,
+  aspect_ratio_other: 4,
 }
 
-// 予約状況には「その他」が無いので、ChoiceField の otherValue に絶対に一致しない値を渡す。
-const NO_OTHER = '__none__'
+const filled = (values: string[]) => values.map((value) => value.trim()).filter(Boolean)
 
 export default function CreatePage() {
   const navigate = useNavigate()
@@ -63,12 +66,17 @@ export default function CreatePage() {
   const [businessErrors, setBusinessErrors] = useState<FieldError[]>([])
   const [appError, setAppError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [overwriting, setOverwriting] = useState(false)
   const [step, setStep] = useState(0)
   // 行先との整合性チェックで気になる点が出た場合、ユーザーが確認したものだけ true になる。
   const [consistencyWarnings, setConsistencyWarnings] = useState<string[]>([])
   const [confirmedWarnings, setConfirmedWarnings] = useState<Record<number, boolean>>({})
-  const [showPlaces, setShowPlaces] = useState(() => Boolean(form.meeting_place || form.dismissal_place))
+  // 意見募集リンク（ポップアップ）と、参加者から届いた追記
+  const [joinUrl, setJoinUrl] = useState('')
+  const [joinSavedTripId, setJoinSavedTripId] = useState<string | null>(null)
+  const [joinLoading, setJoinLoading] = useState(false)
+  const [contributions, setContributions] = useState<Contribution[]>([])
   const errorRef = useRef<HTMLDivElement>(null)
 
   const nights = useMemo(() => nightsBetween(form.date_from, form.date_to), [form.date_from, form.date_to])
@@ -114,11 +122,35 @@ export default function CreatePage() {
     })
   }, [nights, days])
 
+  // 保存済みの旅を編集中なら、参加者からの追記を読み込む（STEP3・4を開くたびに最新化）。
+  const loadContributions = useCallback(async () => {
+    if (!editingTripId) {
+      setContributions([])
+      return
+    }
+    try {
+      setContributions((await api.contributions(editingTripId)).results)
+    } catch {
+      // 追記の表示は補助機能。読み込めなくても入力は続けられる。
+    }
+  }, [editingTripId])
+
+  useEffect(() => {
+    if (step === 2 || step === 3) void loadContributions()
+  }, [step, loadContributions])
+
   const update = <K extends keyof TripForm>(key: K, value: TripForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }))
     // 内容が変わったら、それまでの整合性チェック結果は古くなるのでクリアする。
     setConsistencyWarnings([])
     setConfirmedWarnings({})
+  }
+
+  // AI候補・参加者の意見から、MUST/WANTに場所を追加する（重複は追加しない）。
+  const addSpot = (field: 'must_spots' | 'want_spots', name: string) => {
+    const current = filled(form[field])
+    if (current.includes(name) || current.length >= (options?.max_list_items ?? 20)) return
+    update(field, [...current, name])
   }
 
   // Enterキーでの意図しないフォーム送信を防ぐ（textareaや、ボタン自体でのEnterは許可する）。
@@ -132,7 +164,7 @@ export default function CreatePage() {
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
   const goNext = () => {
-    setStep((current) => Math.min(current + 1, LAST_STEP))
+    setStep((current) => Math.min(current + 1, LAST_INPUT_STEP))
     scrollToTop()
   }
 
@@ -145,8 +177,8 @@ export default function CreatePage() {
   const showErrors = (error: unknown) => {
     if (error instanceof BusinessError) {
       setBusinessErrors(error.errors)
-      const steps = error.errors.map((e) => FIELD_STEP[e.field] ?? LAST_STEP)
-      setStep(Math.min(...steps, LAST_STEP))
+      const steps = error.errors.map((e) => FIELD_STEP[e.field] ?? LAST_INPUT_STEP)
+      setStep(Math.min(...steps, LAST_INPUT_STEP))
       scrollToTop()
     } else if (error instanceof AppError) {
       setAppError(error.message)
@@ -154,6 +186,49 @@ export default function CreatePage() {
     } else {
       setAppError('予期しないエラーが発生しました。時間をおいて再度お試しください。')
       errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  // STEP5の次：サーバーで入力チェックと行先の整合性チェックをしてから確認ページへ。
+  const goConfirm = async () => {
+    setChecking(true)
+    setBusinessErrors([])
+    setAppError(null)
+    try {
+      const result = await api.validateTrip(form)
+      setConsistencyWarnings(result.consistency_warnings)
+      setConfirmedWarnings({})
+      setStep(CONFIRM_STEP)
+      scrollToTop()
+    } catch (error) {
+      showErrors(error)
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  // 意見募集リンクを開く。新規作成中なら、リンクを発行するためにここまでの入力を一度保存する。
+  const openJoinLink = async () => {
+    setJoinLoading(true)
+    setBusinessErrors([])
+    setAppError(null)
+    try {
+      let tripId = editingTripId
+      let savedNow: string | null = null
+      if (!tripId) {
+        const trip = await api.createTrip(form, getDeviceKey())
+        tripId = trip.trip_id
+        savedNow = trip.trip_id
+        startEditing(tripId)
+        setEditingTripId(tripId)
+      }
+      const { join_key } = await api.joinKey(tripId)
+      setJoinSavedTripId(savedNow)
+      setJoinUrl(`${window.location.origin}/join/${join_key}`)
+    } catch (error) {
+      showErrors(error)
+    } finally {
+      setJoinLoading(false)
     }
   }
 
@@ -188,43 +263,27 @@ export default function CreatePage() {
     clearDraft()
     setEditingTripId(null)
     setForm(emptyTripForm())
-    setShowPlaces(false)
+    setContributions([])
     setConsistencyWarnings([])
     setConfirmedWarnings({})
     setStep(0)
   }
 
-  // 整合性チェックの警告をすべて確認した後に、そのまま出力する。
-  const outputAfterWarnings = async () => {
-    setSubmitting(true)
-    try {
-      await save()
-    } catch (error) {
-      showErrors(error)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    // 最後のステップ以外でEnterキー等によりsubmitされた場合は、次へ進むだけにする。
-    if (step < LAST_STEP) {
+    // 確認ページ以外でEnterキー等によりsubmitされた場合は、次へ進むだけにする。
+    if (step < LAST_INPUT_STEP) {
       goNext()
+      return
+    }
+    if (step === LAST_INPUT_STEP) {
+      await goConfirm()
       return
     }
     setSubmitting(true)
     setBusinessErrors([])
     setAppError(null)
     try {
-      // 出力前にサーバー側でビジネスエラーの確認と行先の整合性チェックを行う。
-      const result = await api.validateTrip(form)
-      if (result.consistency_warnings.length > 0) {
-        setConsistencyWarnings(result.consistency_warnings)
-        setConfirmedWarnings({})
-        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        return
-      }
       await save()
     } catch (error) {
       showErrors(error)
@@ -233,8 +292,7 @@ export default function CreatePage() {
     }
   }
 
-  const allWarningsConfirmed =
-    consistencyWarnings.length > 0 && consistencyWarnings.every((_, index) => confirmedWarnings[index])
+  const allWarningsConfirmed = consistencyWarnings.every((_, index) => confirmedWarnings[index])
 
   if (loadError) {
     return (
@@ -253,34 +311,7 @@ export default function CreatePage() {
   }
 
   const suggestEnabled = options.place_suggest_enabled
-
-  const transportFields = (prefix: 'outbound' | 'return', label: string, hint: string) => (
-    <div className="transport-block">
-      <h3 className="card__subtitle">{label}</h3>
-      <ChoiceField
-        label="交通手段"
-        required
-        hint={hint}
-        choices={options.transports}
-        value={form[`${prefix}_transport`]}
-        onChange={(value) => update(`${prefix}_transport`, value)}
-        otherValue={options.other_value}
-        otherText={form[`${prefix}_transport_other`]}
-        onOtherTextChange={(value) => update(`${prefix}_transport_other`, value)}
-        otherPlaceholder="例）夜行フェリー、レンタカー"
-      />
-      <ChoiceField
-        label="予約状況"
-        required
-        choices={options.reservation_statuses}
-        value={form[`${prefix}_reservation`]}
-        onChange={(value) => update(`${prefix}_reservation`, value)}
-        otherValue={NO_OTHER}
-        otherText=""
-        onOtherTextChange={() => undefined}
-      />
-    </div>
-  )
+  const isConfirm = step === CONFIRM_STEP
 
   return (
     <div className="page">
@@ -292,7 +323,7 @@ export default function CreatePage() {
       {editingTripId && (
         <div className="notice notice--editing">
           <span>
-            旅ID <strong>{editingTripId}</strong> を再編集中です。保存すると元のプロンプトが上書きされます。
+            旅ID <strong>{editingTripId}</strong> を編集中です。保存すると元のプロンプトが上書きされます。
           </span>
           <button type="button" className="field-shortcut" onClick={cancelEditing}>
             編集をやめて新規作成する
@@ -302,10 +333,13 @@ export default function CreatePage() {
 
       <div className="step-indicator">
         <p className="step-indicator__label">
-          STEP {step + 1} / {STEP_LABELS.length}　{STEP_LABELS[step]}
+          {isConfirm ? '入力内容の確認' : `STEP ${step + 1} / ${STEP_LABELS.length}　${STEP_LABELS[step]}`}
         </p>
         <div className="step-indicator__bar">
-          <div className="step-indicator__fill" style={{ width: `${((step + 1) / STEP_LABELS.length) * 100}%` }} />
+          <div
+            className="step-indicator__fill"
+            style={{ width: `${(isConfirm ? 1 : (step + 1) / (STEP_LABELS.length + 1)) * 100}%` }}
+          />
         </div>
       </div>
 
@@ -315,156 +349,103 @@ export default function CreatePage() {
 
       <form className="form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
         {step === 0 && (
-          <>
-            <section className="card">
-              <h2 className="card__title">旅の基本</h2>
+          <section className="card">
+            <h2 className="card__title">旅の基本</h2>
 
-              <div className="field">
-                <label className="field__label" htmlFor="title">
-                  タイトル<span className="field__required">必須</span>
-                </label>
-                <input
-                  id="title"
-                  type="text"
-                  className="input"
-                  value={form.title}
-                  placeholder="例）秋の京都ふたり旅"
-                  onChange={(event) => update('title', event.target.value)}
-                />
-              </div>
+            <div className="field">
+              <label className="field__label" htmlFor="title">
+                タイトル<span className="field__required">必須</span>
+              </label>
+              <input
+                id="title"
+                type="text"
+                className="input"
+                value={form.title}
+                placeholder="例）秋の京都ふたり旅"
+                onChange={(event) => update('title', event.target.value)}
+              />
+            </div>
 
-              <div className="field">
-                <label className="field__label" htmlFor="theme">
-                  テーマ
-                </label>
-                <input
-                  id="theme"
-                  type="text"
-                  className="input"
-                  value={form.theme}
-                  placeholder="例）紅葉と甘いものを楽しむ"
-                  onChange={(event) => update('theme', event.target.value)}
-                />
-              </div>
+            <div className="field">
+              <label className="field__label" htmlFor="theme">
+                テーマ
+              </label>
+              <input
+                id="theme"
+                type="text"
+                className="input"
+                value={form.theme}
+                placeholder="例）紅葉と甘いものを楽しむ"
+                onChange={(event) => update('theme', event.target.value)}
+              />
+            </div>
 
-              <div className="field">
-                <label className="field__label" htmlFor="destination">
-                  行先
-                </label>
-                <p className="field__hint">おおまかな方面で構いません。宿泊場所やスポットとの整合性チェックに使います。</p>
-                <input
-                  id="destination"
-                  type="text"
-                  className="input"
-                  value={form.destination}
-                  placeholder="例）京都・関西方面"
-                  onChange={(event) => update('destination', event.target.value)}
-                />
-              </div>
+            <div className="field">
+              <label className="field__label" htmlFor="destination">
+                行先
+              </label>
+              <p className="field__hint">おおまかな方面で構いません。宿泊場所やスポットとの整合性チェックに使います。</p>
+              <input
+                id="destination"
+                type="text"
+                className="input"
+                value={form.destination}
+                placeholder="例）京都・関西方面"
+                onChange={(event) => update('destination', event.target.value)}
+              />
+            </div>
 
-              <div className="field">
-                <span className="field__label">
-                  日程<span className="field__required">必須</span>
-                </span>
-                <div className="date-grid">
-                  <div className="date-grid__cell">
-                    <label className="field__sublabel" htmlFor="date-from">
-                      自
-                    </label>
-                    <input
-                      id="date-from"
-                      type="date"
-                      className="input"
-                      value={form.date_from}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        // 期間（至）が未入力なら、まず同日を仮でセットしておく（あとで自由に変更できる）。
-                        setForm((current) => ({
-                          ...current,
-                          date_from: value,
-                          date_to: current.date_to ? current.date_to : value,
-                        }))
-                      }}
-                    />
-                  </div>
-                  <div className="date-grid__cell">
-                    <label className="field__sublabel" htmlFor="date-to">
-                      至
-                    </label>
-                    <input
-                      id="date-to"
-                      type="date"
-                      className="input"
-                      value={form.date_to}
-                      min={form.date_from || undefined}
-                      onChange={(event) => update('date_to', event.target.value)}
-                    />
-                  </div>
+            <div className="field">
+              <span className="field__label">
+                日程<span className="field__required">必須</span>
+              </span>
+              <div className="date-grid">
+                <div className="date-grid__cell">
+                  <label className="field__sublabel" htmlFor="date-from">
+                    自
+                  </label>
+                  <input
+                    id="date-from"
+                    type="date"
+                    className="input"
+                    value={form.date_from}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      // 期間（至）が未入力なら、まず同日を仮でセットしておく（あとで自由に変更できる）。
+                      setForm((current) => ({
+                        ...current,
+                        date_from: value,
+                        date_to: current.date_to ? current.date_to : value,
+                      }))
+                    }}
+                  />
                 </div>
-                {hasPeriod && (
-                  <p className="field__hint field__hint--accent">
-                    {isDayTrip ? '日帰りの旅程です。' : `${nights}泊${nights + 1}日の旅程です。`}
-                  </p>
-                )}
+                <div className="date-grid__cell">
+                  <label className="field__sublabel" htmlFor="date-to">
+                    至
+                  </label>
+                  <input
+                    id="date-to"
+                    type="date"
+                    className="input"
+                    value={form.date_to}
+                    min={form.date_from || undefined}
+                    onChange={(event) => update('date_to', event.target.value)}
+                  />
+                </div>
               </div>
-            </section>
-
-            <section className="card">
-              <h2 className="card__title">往路・復路の交通手段</h2>
-              {transportFields('outbound', '往路（行き）', '出発するときの移動手段')}
-              {transportFields('return', '復路（帰り）', '帰ってくるときの移動手段')}
-
-              <div className="field">
-                {showPlaces ? (
-                  <>
-                    <div className="field__label-row">
-                      <label className="field__label" htmlFor="meeting-place">
-                        集合場所
-                      </label>
-                      <span className="field__hint">任意</span>
-                    </div>
-                    <AddressInput
-                      id="meeting-place"
-                      value={form.meeting_place}
-                      onChange={(value) => update('meeting_place', value)}
-                      placeholder="例）京都駅 中央改札前"
-                      suggestEnabled={suggestEnabled}
-                    />
-                    <div className="field__label-row places-dismissal">
-                      <label className="field__label" htmlFor="dismissal-place">
-                        解散場所
-                      </label>
-                      {form.meeting_place.trim() && !form.dismissal_place.trim() && (
-                        <button
-                          type="button"
-                          className="field-shortcut"
-                          onClick={() => update('dismissal_place', form.meeting_place)}
-                        >
-                          集合場所と同じ
-                        </button>
-                      )}
-                    </div>
-                    <AddressInput
-                      id="dismissal-place"
-                      value={form.dismissal_place}
-                      onChange={(value) => update('dismissal_place', value)}
-                      placeholder="例）京都駅 八条口"
-                      suggestEnabled={suggestEnabled}
-                    />
-                  </>
-                ) : (
-                  <button type="button" className="add-button" onClick={() => setShowPlaces(true)}>
-                    ＋ 集合・解散場所も指定する（任意）
-                  </button>
-                )}
-              </div>
-            </section>
-          </>
+              {hasPeriod && (
+                <p className="field__hint field__hint--accent">
+                  {isDayTrip ? '日帰りの旅程です。' : `${nights}泊${nights + 1}日の旅程です。`}
+                </p>
+              )}
+            </div>
+          </section>
         )}
 
         {step === 1 && (
           <section className="card">
-            <h2 className="card__title">滞在場所決め</h2>
+            <h2 className="card__title">宿泊先</h2>
             <div className="field">
               <span className="field__label">
                 宿泊先<span className="field__required">必須</span>
@@ -491,153 +472,204 @@ export default function CreatePage() {
         )}
 
         {step === 2 && (
-          <>
-            <section className="card">
+          <section className="card">
+            <div className="card__header">
               <h2 className="card__title">いきたいところ</h2>
-
-              <div className="field">
-                <span className="field__label">MUST</span>
-                <p className="field__hint">絶対に行きたい場所。必ず旅程に入れてもらいます。</p>
-                <RepeatableInputs
-                  values={form.must_spots}
-                  onChange={(values) => update('must_spots', values)}
-                  placeholder="例）清水寺"
-                  asAddress
-                  suggestEnabled={suggestEnabled}
-                  addLabel="MUSTを追加する"
-                  max={options.max_list_items}
-                />
+              <div className="card__header-actions">
+                <button
+                  type="button"
+                  className="button button--ghost button--small"
+                  onClick={() => void openJoinLink()}
+                  disabled={joinLoading}
+                >
+                  {joinLoading ? '準備中...' : '意見を集める'}
+                </button>
               </div>
+            </div>
 
-              <div className="field">
-                <span className="field__label">WANT</span>
-                <p className="field__hint">行けたら行きたい場所。余裕があれば組み込んでもらいます。</p>
-                <RepeatableInputs
-                  values={form.want_spots}
-                  onChange={(values) => update('want_spots', values)}
-                  placeholder="例）錦市場"
-                  asAddress
-                  suggestEnabled={suggestEnabled}
-                  addLabel="WANTを追加する"
-                  max={options.max_list_items}
-                />
-              </div>
-            </section>
+            <div className="field">
+              <span className="field__label">MUST</span>
+              <p className="field__hint">絶対に行きたい場所。必ず旅程に入れてもらいます。</p>
+              <RepeatableInputs
+                values={form.must_spots}
+                onChange={(values) => update('must_spots', values)}
+                placeholder="例）清水寺"
+                asAddress
+                suggestEnabled={suggestEnabled}
+                addLabel="MUSTを追加する"
+                max={options.max_list_items}
+              />
+            </div>
 
-            <section className="card">
-              <h2 className="card__title">条件</h2>
+            <div className="field">
+              <span className="field__label">WANT</span>
+              <p className="field__hint">行けたら行きたい場所。余裕があれば組み込んでもらいます。</p>
+              <RepeatableInputs
+                values={form.want_spots}
+                onChange={(values) => update('want_spots', values)}
+                placeholder="例）錦市場"
+                asAddress
+                suggestEnabled={suggestEnabled}
+                addLabel="WANTを追加する"
+                max={options.max_list_items}
+              />
+            </div>
 
-              <div className="field">
-                <span className="field__label">予約済みの予定</span>
-                <p className="field__hint">時間が決まっている予定を入れてください（日付・時刻は任意）。</p>
-                <ConstraintInputs
-                  values={form.constraints}
-                  onChange={(values) => update('constraints', values)}
-                  minDate={form.date_from}
-                  maxDate={form.date_to}
-                  max={options.max_list_items}
-                />
-              </div>
+            <ContributionPanel
+              kind="spots"
+              contributions={contributions}
+              must={filled(form.must_spots)}
+              want={filled(form.want_spots)}
+              onAdopt={addSpot}
+            />
 
-              {hasPeriod && (
-                <div className="field">
-                  <span className="field__label">ざっくり決まっている予定</span>
-                  <p className="field__hint">「〇〇に行きたい」くらいのラフな予定があれば、日ごとに書いてください。</p>
-                  <div className="lodging-list">
-                    {form.rough_plans.map((plan, index) => (
-                      <div className="lodging-list__row" key={index}>
-                        <div className="lodging-list__head">
-                          <span className="lodging-list__label">{index + 1}日目</span>
-                        </div>
-                        <textarea
-                          className="input textarea"
-                          value={plan}
-                          placeholder="例）午前中は観光、午後はカフェ巡りをのんびり"
-                          onChange={(event) => {
-                            const next = [...form.rough_plans]
-                            next[index] = event.target.value
-                            update('rough_plans', next)
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="field">
-                <label className="field__label" htmlFor="free-notes">
-                  自由入力欄
-                </label>
-                <p className="field__hint">スケジュール感、NG項目、配慮事項など考慮事項</p>
-                <textarea
-                  id="free-notes"
-                  className="input textarea"
-                  value={form.free_notes}
-                  placeholder="例）休憩多めでゆったり回りたい／朝5時起きは無理／Aさんは甲殻類アレルギー"
-                  onChange={(event) => update('free_notes', event.target.value)}
-                />
-              </div>
-            </section>
-
-            <section className="card">
-              <h2 className="card__title">旅行意見聴取（任意）</h2>
-              <p className="field__hint">
-                ONにすると、出力後の結果ページに参加者向けの回答URLが表示されます。参加者はログインなしで「行きたい場所」「苦手なこと」などを送れます。
-                届いた意見は結果ページで確認し、必要に応じて再編集で反映してください（自動では反映されません）。
-              </p>
-              <label className="consistency-check__item">
-                <input
-                  type="checkbox"
-                  checked={form.collect_feedback}
-                  onChange={(event) => update('collect_feedback', event.target.checked)}
-                />
-                <span>参加者に意見を聞く</span>
-              </label>
-            </section>
-          </>
+            {options.spot_suggest_enabled && (
+              <SpotSuggestions
+                theme={form.theme}
+                destination={form.destination}
+                lodgings={form.lodgings}
+                added={{ must: filled(form.must_spots), want: filled(form.want_spots) }}
+                onAdd={addSpot}
+              />
+            )}
+          </section>
         )}
 
         {step === 3 && (
-          <>
-            <section className="card">
-              <h2 className="card__title">出力サイズ（任意）</h2>
-              <p className="field__hint">選ばなかった場合は「おまかせ」としてプロンプトに反映されます。</p>
+          <section className="card">
+            <h2 className="card__title">予定</h2>
 
-              <ChoiceField
-                label="出力サイズ（アスペクト比）"
-                choices={options.aspect_ratios}
-                value={form.aspect_ratio}
-                onChange={(value) => update('aspect_ratio', value)}
-                otherValue={options.other_value}
-                otherText={form.aspect_ratio_other}
-                onOtherTextChange={(value) => update('aspect_ratio_other', value)}
+            <div className="field">
+              <span className="field__label">予約済みの予定</span>
+              <p className="field__hint">
+                新幹線・飛行機・お店の予約など、時間が決まっている予定を入れてください（日付・時刻は任意）。
+              </p>
+              <ConstraintInputs
+                values={form.constraints}
+                onChange={(values) => update('constraints', values)}
+                minDate={form.date_from}
+                maxDate={form.date_to}
+                max={options.max_list_items}
               />
+            </div>
 
-              {form.aspect_ratio && (
-                <button
-                  type="button"
-                  className="field-shortcut"
-                  onClick={() => {
-                    setForm((current) => ({
-                      ...current,
-                      aspect_ratio: '',
-                      aspect_ratio_other: '',
-                    }))
-                  }}
-                >
-                  おまかせにする
-                </button>
-              )}
-            </section>
+            {hasPeriod && (
+              <div className="field">
+                <span className="field__label">ざっくり決まっている予定</span>
+                <p className="field__hint">「〇〇に行きたい」くらいのラフな予定があれば、日ごとに書いてください。</p>
+                <div className="lodging-list">
+                  {form.rough_plans.map((plan, index) => (
+                    <div className="lodging-list__row" key={index}>
+                      <div className="lodging-list__head">
+                        <span className="lodging-list__label">{index + 1}日目</span>
+                      </div>
+                      <textarea
+                        className="input textarea"
+                        value={plan}
+                        placeholder="例）午前中は観光、午後はカフェ巡りをのんびり"
+                        onChange={(event) => {
+                          const next = [...form.rough_plans]
+                          next[index] = event.target.value
+                          update('rough_plans', next)
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
+            <ContributionPanel
+              kind="plans"
+              contributions={contributions}
+              constraints={form.constraints}
+              roughPlans={form.rough_plans}
+              onAdoptConstraint={(row) => update('constraints', [...form.constraints, row])}
+              onAdoptRoughPlan={(index, text) => {
+                const next = [...form.rough_plans]
+                next[index] = next[index].trim() ? `${next[index].trim()}／${text}` : text
+                update('rough_plans', next)
+              }}
+            />
+
+            <div className="field">
+              <label className="field__label" htmlFor="free-notes">
+                考慮事項
+              </label>
+              <p className="field__hint">スケジュール感、NG項目、配慮事項など考慮事項</p>
+              <textarea
+                id="free-notes"
+                className="input textarea"
+                value={form.free_notes}
+                placeholder="例）休憩多めでゆったり回りたい／朝5時起きは無理／Aさんは甲殻類アレルギー"
+                onChange={(event) => update('free_notes', event.target.value)}
+              />
+            </div>
+          </section>
+        )}
+
+        {step === 4 && (
+          <section className="card">
+            <h2 className="card__title">出力設定</h2>
+            <p className="field__hint">旅の行程表プロンプトは必ず出力されます。しおりの表紙画像も作りたい場合はチェックしてください。</p>
+            <label className="consistency-check__item">
+              <input
+                type="checkbox"
+                checked={form.image_enabled}
+                onChange={(event) => update('image_enabled', event.target.checked)}
+              />
+              <span>画像生成用プロンプトも出力する</span>
+            </label>
+
+            {form.image_enabled && (
+              <div className="output-settings__image">
+                <div className="field">
+                  <label className="field__label" htmlFor="image-mood">
+                    画像のテーマ
+                  </label>
+                  <p className="field__hint">画像の雰囲気。空欄なら旅のテーマや行先に合わせておまかせになります。</p>
+                  <input
+                    id="image-mood"
+                    type="text"
+                    className="input"
+                    value={form.image_mood}
+                    placeholder="例）水彩風、レトロなポスター風"
+                    onChange={(event) => update('image_mood', event.target.value)}
+                  />
+                </div>
+
+                <ChoiceField
+                  label="画像サイズ"
+                  choices={options.aspect_ratios}
+                  value={form.aspect_ratio}
+                  onChange={(value) => update('aspect_ratio', value)}
+                  otherValue={options.other_value}
+                  otherText={form.aspect_ratio_other}
+                  onOtherTextChange={(value) => update('aspect_ratio_other', value)}
+                />
+                {form.aspect_ratio && (
+                  <button
+                    type="button"
+                    className="field-shortcut"
+                    onClick={() => setForm((current) => ({ ...current, aspect_ratio: '', aspect_ratio_other: '' }))}
+                  >
+                    サイズはおまかせにする
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {step === CONFIRM_STEP && (
+          <>
             <TripSummaryCard form={form} options={options} />
 
             {consistencyWarnings.length > 0 && (
               <section className="card consistency-check">
                 <h2 className="card__title">行先との整合性を確認してください</h2>
                 <p className="field__hint">
-                  AIによる自動チェックです。誤検知の可能性もあるので、内容を見て問題なければチェックしてください。
+                  AIによる自動チェックです。誤検知の可能性もあるので、内容を見て問題なければチェックしてから出力してください。
                 </p>
                 <ul className="consistency-check__list">
                   {consistencyWarnings.map((warning, index) => (
@@ -655,30 +687,18 @@ export default function CreatePage() {
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  disabled={!allWarningsConfirmed || submitting}
-                  onClick={() => void outputAfterWarnings()}
-                >
-                  確認して出力する
-                </button>
               </section>
             )}
           </>
         )}
 
-        <div
-          className={
-            step > 0 || (editingTripId && step < LAST_STEP) ? 'form__actions form__actions--multi' : 'form__actions'
-          }
-        >
+        <div className={step > 0 || editingTripId ? 'form__actions form__actions--multi' : 'form__actions'}>
           {step > 0 && (
             <button type="button" className="button button--ghost" onClick={goPrev}>
               戻る
             </button>
           )}
-          {step < LAST_STEP ? (
+          {step < CONFIRM_STEP ? (
             <>
               {editingTripId && (
                 <button
@@ -690,17 +710,31 @@ export default function CreatePage() {
                   {overwriting ? '保存中...' : '上書き'}
                 </button>
               )}
-              <button type="button" className="button button--primary" onClick={goNext}>
-                次へ
-              </button>
+              {step < LAST_INPUT_STEP ? (
+                <button type="button" className="button button--primary" onClick={goNext}>
+                  次へ
+                </button>
+              ) : (
+                <button type="button" className="button button--primary" onClick={() => void goConfirm()} disabled={checking}>
+                  {checking ? '確認中...' : '入力内容を確認する'}
+                </button>
+              )}
             </>
           ) : (
-            <button type="submit" className="button button--primary" disabled={submitting}>
+            <button
+              type="submit"
+              className="button button--primary"
+              disabled={submitting || (consistencyWarnings.length > 0 && !allWarningsConfirmed)}
+            >
               {submitting ? (editingTripId ? '更新中...' : '出力中...') : editingTripId ? '更新して出力する' : '出力する'}
             </button>
           )}
         </div>
       </form>
+
+      {joinUrl && (
+        <JoinLinkModal url={joinUrl} savedTripId={joinSavedTripId} onClose={() => setJoinUrl('')} />
+      )}
     </div>
   )
 }

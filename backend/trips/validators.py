@@ -160,6 +160,8 @@ def normalize(data: dict) -> dict:
         "notes": [],
         "free_notes": _merge_free_notes(data),
         "collect_feedback": bool(data.get("collect_feedback")),
+        "image_enabled": bool(data.get("image_enabled")),
+        "image_mood": _as_text(data.get("image_mood"))[:200],
         "design_taste": "",
         "design_taste_other": "",
         "color_image": "",
@@ -252,3 +254,29 @@ def validate(cleaned: dict) -> list:
 def normalize_and_validate(data: dict):
     cleaned = normalize(data)
     return cleaned, validate(cleaned)
+
+
+def normalize_and_validate_contribution(data: dict, days: int) -> tuple:
+    """意見募集リンクからの追記を整え、(cleaned, errors) を返す。"""
+    cleaned = {
+        "name": _as_text(data.get("name"))[:50],
+        "must_spots": _as_text_list(data.get("must_spots"))[:MAX_LIST_ITEMS],
+        "want_spots": _as_text_list(data.get("want_spots"))[:MAX_LIST_ITEMS],
+        "constraints": _normalize_constraints(data.get("constraints"))[:MAX_LIST_ITEMS],
+        # 日ごとの入力。空欄の日も位置を保つため、そのまま日数ぶんに切りそろえる。
+        "rough_plans": [_as_text(item)[:MAX_TEXT_LENGTH] for item in (data.get("rough_plans") or [])][:days],
+    }
+    errors = []
+    if not cleaned["name"]:
+        errors.append({"field": "name", "message": "名前を入力してください。"})
+    has_content = (
+        cleaned["must_spots"] or cleaned["want_spots"] or cleaned["constraints"] or any(cleaned["rough_plans"])
+    )
+    if not has_content:
+        errors.append({"field": "must_spots", "message": "いきたいところか予定を1つ以上入力してください。"})
+    for field in ("must_spots", "want_spots"):
+        if any(len(item) > MAX_TEXT_LENGTH for item in cleaned[field]):
+            errors.append({"field": field, "message": f"{MAX_TEXT_LENGTH}文字以内で入力してください。"})
+    if not any(cleaned["rough_plans"]):
+        cleaned["rough_plans"] = []
+    return cleaned, errors

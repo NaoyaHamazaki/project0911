@@ -34,8 +34,8 @@ DEFAULT_PROMPT_RULES = (
     "- MUSTのスポットは必ずすべて旅程に入れる\n"
     "- 移動時間は実際の距離や交通手段をふまえて現実的に見積もる\n"
     "- 「予約済みの予定」の日時は固定して動かさない\n"
-    "- NG項目に挙げたものは提案に含めない\n"
-    "- 初日の開始・最終日の終了は、往路・復路の交通手段（集合・解散場所の指定があればそれ）に合わせる\n"
+    "- 考慮事項に挙げたNG項目は提案に含めない\n"
+    "- 初日の開始・最終日の終了は、予約済みの予定（新幹線・飛行機など）があればそれに合わせる\n"
     "- 全体は{period_label}の分量に収める"
 )
 
@@ -140,10 +140,11 @@ def build_prompt(cleaned: dict) -> str:
         lines.append(f"- 行先: {cleaned['destination']}")
     lines += [
         f"- 日程: {_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）",
-        _transport_line(cleaned, "outbound", "往路の交通手段"),
-        _transport_line(cleaned, "return", "復路の交通手段"),
     ]
-    # 集合・解散場所は任意項目。入力があるときだけ載せる。
+    # 交通手段・集合・解散場所は入力欄を廃止した。過去データに値があるときだけ載せる。
+    for prefix, label in (("outbound", "往路の交通手段"), ("return", "復路の交通手段")):
+        if cleaned.get(f"{prefix}_transport"):
+            lines.append(_transport_line(cleaned, prefix, label))
     if cleaned.get("meeting_place"):
         lines.append(f"- 集合場所: {cleaned['meeting_place']}")
     if cleaned.get("dismissal_place"):
@@ -240,7 +241,7 @@ def build_image_prompt(cleaned: dict) -> str:
     lines += [
         "",
         "# デザイン指示",
-        "- テイスト・配色: 旅のテーマや行先の雰囲気に合わせて自由に選んでください",
+        f"- 雰囲気: {(cleaned.get('image_mood') or '').strip() or '旅のテーマや行先に合わせて自由に選んでください'}",
         f"- 出力サイズ（アスペクト比）: {_design_label(choices.ASPECT_RATIOS, cleaned.get('aspect_ratio'), cleaned.get('aspect_ratio_other'))}",
         "",
         "# 守ってほしいこと",

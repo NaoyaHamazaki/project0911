@@ -6,7 +6,7 @@ import ErrorPanel from '../components/ErrorPanel'
 import { AppError, api } from '../lib/api'
 import { formatDateTime, formatPeriod } from '../lib/format'
 import { saveDraft, startEditing } from '../lib/storage'
-import { tripToForm, type FeedbackItem, type Trip } from '../lib/types'
+import { tripToForm, type Contribution, type Trip } from '../lib/types'
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -40,7 +40,7 @@ export default function ResultPage() {
   const [toast, setToast] = useState('')
   // プロンプト本文はデフォルト非表示。「確認」ボタンでそれぞれ開閉する。
   const [visible, setVisible] = useState<Record<string, boolean>>({})
-  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([])
+  const [contributions, setContributions] = useState<Contribution[]>([])
 
   const shareUrl = `${window.location.origin}/trip/${tripId}`
 
@@ -67,13 +67,13 @@ export default function ResultPage() {
       .catch(() => setQrDataUrl(''))
   }, [trip, shareUrl])
 
-  // 意見聴取をONにしている旅だけ、参加者からの意見を読み込む（1回だけ。自動更新はしない）。
+  // 意見募集リンクを発行済みの旅だけ、参加者からの追記を読み込む。
   useEffect(() => {
-    if (!trip?.collect_feedback) return
+    if (!trip?.join_key) return
     api
-      .tripFeedback(trip.trip_id)
-      .then((data) => setFeedbacks(data.results))
-      .catch(() => setFeedbacks([]))
+      .contributions(trip.trip_id)
+      .then((data) => setContributions(data.results))
+      .catch(() => setContributions([]))
   }, [trip])
 
   const notify = (message: string) => {
@@ -127,7 +127,7 @@ export default function ResultPage() {
     )
   }
 
-  const feedbackUrl = `${window.location.origin}/trip/${trip.trip_id}/feedback`
+  const joinUrl = trip.join_key ? `${window.location.origin}/join/${trip.join_key}` : ''
   const outputs = [
     {
       key: 'itinerary',
@@ -142,6 +142,8 @@ export default function ResultPage() {
       hint: '画像生成AIに貼り付けると、デザイン指示に沿ったしおりの表紙画像を作ってくれます。',
       text: trip.image_prompt_text,
       copied: '画像生成用プロンプトをコピーしました',
+      // 出力設定で画像出力をONにした旅だけ表示する。
+      hidden: !trip.image_enabled && !trip.image_prompt_text,
     },
   ]
 
@@ -168,7 +170,7 @@ export default function ResultPage() {
         </div>
       </section>
 
-      {outputs.map((output) => (
+      {outputs.filter((output) => !('hidden' in output && output.hidden)).map((output) => (
         <section className="card" key={output.key}>
           <div className="card__header">
             <h2 className="card__title">{output.title}</h2>
@@ -201,33 +203,40 @@ export default function ResultPage() {
         </section>
       ))}
 
-      {trip.collect_feedback && (
+      {joinUrl && (
         <section className="card">
-          <h2 className="card__title">参加者からの意見（{feedbacks.length}件）</h2>
+          <h2 className="card__title">一緒に行く人からの意見（{contributions.length}件）</h2>
           <p className="field__hint">
-            このURLを参加者に送ると、ログインなしで意見を送ってもらえます。届いた意見は自動では反映されないので、必要に応じて「再編集」で入力に加えてください。
+            届いた意見は自動では反映されません。「再編集」のSTEP3・STEP4で、取り込む項目を選んでください。
           </p>
           <div className="feedback-url">
-            <code className="feedback-url__text">{feedbackUrl}</code>
+            <code className="feedback-url__text">{joinUrl}</code>
             <button
               type="button"
               className="button button--ghost button--small"
-              onClick={() => void handleCopy(feedbackUrl, '回答URLをコピーしました')}
+              onClick={() => void handleCopy(joinUrl, '意見募集リンクをコピーしました')}
             >
-              URLをコピー
+              リンクをコピー
             </button>
           </div>
-          {feedbacks.length === 0 ? (
+          {contributions.length === 0 ? (
             <p className="summary__empty">まだ意見は届いていません。</p>
           ) : (
             <ul className="request-list">
-              {feedbacks.map((item) => (
+              {contributions.map((item) => (
                 <li className="request-list__item" key={item.id}>
                   <div className="request-list__head">
-                    <span className="request-list__name">{item.nickname || '名無し'}</span>
+                    <span className="request-list__name">{item.name}</span>
                     <span className="request-list__date">{formatDateTime(item.created_at)}</span>
                   </div>
-                  <p className="request-list__body">{item.body}</p>
+                  <p className="request-list__body">
+                    {[
+                      ...item.must_spots.map((spot) => `MUST：${spot}`),
+                      ...item.want_spots.map((spot) => `WANT：${spot}`),
+                      ...item.constraints.map((row) => `予約済み：${row.content}`),
+                      ...item.rough_plans.flatMap((plan, index) => (plan.trim() ? [`${index + 1}日目：${plan}`] : [])),
+                    ].join('\n')}
+                  </p>
                 </li>
               ))}
             </ul>

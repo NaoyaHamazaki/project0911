@@ -1,10 +1,13 @@
 import type {
+  Constraint,
+  Contribution,
   FeatureRequestItem,
-  FeedbackInfo,
-  FeedbackItem,
   FieldError,
+  JoinInfo,
+  Lodging,
   Options,
   PlaceSuggestion,
+  SpotSuggestion,
   PromptSettingItem,
   TableInfo,
   Trip,
@@ -104,10 +107,25 @@ export const api = {
   myTrips: (deviceKey: string) =>
     request<{ results: TripSummary[] }>(`/api/trips/?device_key=${encodeURIComponent(deviceKey)}`),
 
-  tripFeedback: (tripId: string) => request<FeedbackInfo>(`/api/trips/${encodeURIComponent(tripId)}/feedback/`),
+  joinKey: (tripId: string) =>
+    request<{ join_key: string }>(`/api/trips/${encodeURIComponent(tripId)}/join-key/`, { method: 'POST' }),
 
-  sendTripFeedback: (tripId: string, payload: { nickname: string; body: string }) =>
-    request<FeedbackItem>(`/api/trips/${encodeURIComponent(tripId)}/feedback/`, {
+  contributions: (tripId: string) =>
+    request<{ join_key: string; results: Contribution[] }>(`/api/trips/${encodeURIComponent(tripId)}/contributions/`),
+
+  joinInfo: (joinKey: string) => request<JoinInfo>(`/api/join/${encodeURIComponent(joinKey)}/`),
+
+  sendContribution: (
+    joinKey: string,
+    payload: { name: string; must_spots: string[]; want_spots: string[]; constraints: Constraint[]; rough_plans: string[] },
+  ) =>
+    request<Contribution>(`/api/join/${encodeURIComponent(joinKey)}/`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  suggestSpots: (payload: { theme: string; destination: string; lodgings: Lodging[]; exclude: string[] }) =>
+    request<{ enabled: boolean; results: SpotSuggestion[] }>('/api/spots/suggest/', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

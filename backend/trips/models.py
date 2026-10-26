@@ -1,4 +1,5 @@
 import random
+import secrets
 import string
 
 from django.db import models
@@ -11,6 +12,15 @@ _TRIP_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 # 総当たりの組み合わせ数は 32^7 ≒ 343億通り。衝突時は下の再試行ループで発番し直す。
 _TRIP_ID_RANDOM_LENGTH = 7
 _TRIP_ID_PREFIX = "T"
+
+
+def generate_join_key() -> str:
+    """意見募集リンク用の推測されにくいキー。旅IDとは別物にして、参加者に編集権限を渡さない。"""
+    for _ in range(10):
+        candidate = secrets.token_urlsafe(12)
+        if not TripRequest.objects.filter(join_key=candidate).exists():
+            return candidate
+    raise RuntimeError("意見募集キーの発番に失敗しました。時間をおいて再実行してください。")
 
 
 def generate_trip_id() -> str:
@@ -85,6 +95,12 @@ class TripRequest(models.Model):
     aspect_ratio = models.CharField("出力サイズ", max_length=20, blank=True)
     aspect_ratio_other = models.CharField("出力サイズ(その他)", max_length=200, blank=True)
 
+    # 出力設定。画像出力をONにした旅だけ画像生成用プロンプトを作る。
+    image_enabled = models.BooleanField("画像出力", default=False)
+    image_mood = models.CharField("画像の雰囲気", max_length=200, blank=True)
+    # 参加者向け意見募集リンク(/join/<key>)のキー。旅IDとは別にして、参加者に編集権限を渡さない。
+    join_key = models.CharField("意見募集キー", max_length=32, blank=True, db_index=True)
+
     prompt_text = models.TextField("生成プロンプト(行程表)", blank=True)
     image_prompt_text = models.TextField("生成プロンプト(画像生成用)", blank=True)
 
@@ -153,6 +169,30 @@ class TripFeedback(models.Model):
 
     def __str__(self):
         return f"{self.trip.trip_id}: {self.body[:20]}"
+
+
+class TripContribution(models.Model):
+    """意見募集リンクから参加者が追記した「いきたいところ」「予定」。
+
+    参加者は追記のみ（編集・削除不可）。親ユーザーが作成画面で見て、必要な項目を取り込む。
+    """
+
+    trip = models.ForeignKey(TripRequest, verbose_name="旅", on_delete=models.CASCADE, related_name="contributions")
+    name = models.CharField("名前", max_length=50)
+    must_spots = models.JSONField("いきたいスポット(MUST)", default=list, blank=True)
+    want_spots = models.JSONField("いきたいスポット(WANT)", default=list, blank=True)
+    constraints = models.JSONField("予約済みの予定", default=list, blank=True)
+    rough_plans = models.JSONField("ざっくり決まっている予定", default=list, blank=True)
+    created_at = models.DateTimeField("投稿日時", auto_now_add=True)
+
+    class Meta:
+        db_table = "trip_contribution"
+        verbose_name = "参加者の意見"
+        verbose_name_plural = "参加者の意見"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.trip.trip_id}: {self.name}"
 
 
 class FeatureRequest(models.Model):

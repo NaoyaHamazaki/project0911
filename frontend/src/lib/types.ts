@@ -17,6 +17,8 @@ export type Options = {
   max_trip_days: number
   max_list_items: number
   place_suggest_enabled: boolean
+  /** いきたいスポットのAI候補（Gemini）が使えるか */
+  spot_suggest_enabled: boolean
   /** 管理者用プロンプト編集画面(/admin-settings)を出すかどうか。本番では基本false。 */
   admin_menu_enabled: boolean
 }
@@ -82,6 +84,9 @@ export type TripForm = {
   notes: string[]
   free_notes: string
   collect_feedback: boolean
+  /** 出力設定: 画像生成用プロンプトも出力するか */
+  image_enabled: boolean
+  image_mood: string
   design_taste: string
   design_taste_other: string
   color_image: string
@@ -96,6 +101,8 @@ export type Trip = TripForm & {
   trip_id: string
   prompt_text: string
   image_prompt_text: string
+  /** 意見募集リンクのキー。未発行なら空 */
+  join_key: string
   nights: number
   days: number
   schedule_paces_label: string
@@ -177,6 +184,8 @@ export function tripToForm(trip: Trip): TripForm {
     notes: [''],
     free_notes: mergeLegacyNotes(trip),
     collect_feedback: Boolean(trip.collect_feedback),
+    image_enabled: Boolean(trip.image_enabled),
+    image_mood: trip.image_mood ?? '',
     design_taste: '',
     design_taste_other: '',
     color_image: '',
@@ -211,6 +220,8 @@ export const emptyTripForm = (): TripForm => ({
   notes: [''],
   free_notes: '',
   collect_feedback: false,
+  image_enabled: false,
+  image_mood: '',
   design_taste: '',
   design_taste_other: '',
   color_image: '',
@@ -219,19 +230,32 @@ export const emptyTripForm = (): TripForm => ({
   aspect_ratio_other: '',
 })
 
-export type FeedbackItem = {
+/** 意見募集リンクから参加者が追記した内容 */
+export type Contribution = {
   id: number
-  nickname: string
-  body: string
+  name: string
+  must_spots: string[]
+  want_spots: string[]
+  constraints: Constraint[]
+  rough_plans: string[]
   created_at: string
 }
 
-export type FeedbackInfo = {
-  trip_id: string
+/** 参加者ページで見せる旅の確定情報（旅IDは含まない） */
+export type JoinInfo = {
   title: string
+  theme: string
+  destination: string
   date_from: string
   date_to: string
-  destination: string
-  open: boolean
-  results: FeedbackItem[]
+  nights: number
+  days: number
+  lodgings: string[]
+}
+
+/** いきたいスポットのAI候補 */
+export type SpotSuggestion = {
+  name: string
+  summary: string
+  recommended_for: string
 }

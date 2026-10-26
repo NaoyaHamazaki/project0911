@@ -39,22 +39,10 @@ function Text({ value, empty = '未入力' }: { value: string; empty?: string })
   return <>{value || <span className="summary__empty">{empty}</span>}</>
 }
 
-/** 入力内容の一覧。ステップ④「最終調整と出力」で確認用に表示する。 */
+/** 入力内容の一覧。STEP5のあとの「入力内容の確認」で表示する。 */
 export default function TripSummaryCard({ form, options }: { form: TripForm; options: Options }) {
   const nights = nightsBetween(form.date_from, form.date_to)
   const other = options.other_value
-
-  const transport = (prefix: 'outbound' | 'return') => {
-    const label = labelOfChoice(
-      options.transports,
-      form[`${prefix}_transport`],
-      other,
-      form[`${prefix}_transport_other`],
-      '未選択',
-    )
-    const reservation = labelOfChoice(options.reservation_statuses, form[`${prefix}_reservation`], other, '', '予約状況未選択')
-    return `${label}（${reservation}）`
-  }
 
   return (
     <section className="card">
@@ -64,8 +52,6 @@ export default function TripSummaryCard({ form, options }: { form: TripForm; opt
         <SummaryRow label="テーマ"><Text value={form.theme} /></SummaryRow>
         <SummaryRow label="行先"><Text value={form.destination} /></SummaryRow>
         <SummaryRow label="期間">{formatPeriod(form.date_from, form.date_to)}</SummaryRow>
-        <SummaryRow label="往路">{transport('outbound')}</SummaryRow>
-        <SummaryRow label="復路">{transport('return')}</SummaryRow>
         {(form.meeting_place || form.dismissal_place) && (
           <SummaryRow label="集合・解散">
             {[form.meeting_place && `集合：${form.meeting_place}`, form.dismissal_place && `解散：${form.dismissal_place}`]
@@ -96,10 +82,15 @@ export default function TripSummaryCard({ form, options }: { form: TripForm; opt
           />
         </SummaryRow>
         <SummaryRow label="考慮事項"><Text value={form.free_notes} empty="指定なし" /></SummaryRow>
-        <SummaryRow label="旅行意見聴取">{form.collect_feedback ? '参加者に意見を聞く' : '聞かない'}</SummaryRow>
-        <SummaryRow label="出力サイズ">
-          {labelOfChoice(options.aspect_ratios, form.aspect_ratio, other, form.aspect_ratio_other, 'おまかせ')}
-        </SummaryRow>
+        <SummaryRow label="画像出力">{form.image_enabled ? 'する' : 'しない'}</SummaryRow>
+        {form.image_enabled && (
+          <>
+            <SummaryRow label="画像の雰囲気"><Text value={form.image_mood} empty="おまかせ" /></SummaryRow>
+            <SummaryRow label="画像サイズ">
+              {labelOfChoice(options.aspect_ratios, form.aspect_ratio, other, form.aspect_ratio_other, 'おまかせ')}
+            </SummaryRow>
+          </>
+        )}
       </dl>
     </section>
   )

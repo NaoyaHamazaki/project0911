@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 
-from .models import AppUser, FeatureRequest, Setting, TripFeedback, TripRequest
+from .models import AppUser, FeatureRequest, Setting, TripContribution, TripFeedback, TripRequest
 
 
 @admin.register(TripRequest)
@@ -44,3 +44,9 @@ class SettingAdmin(admin.ModelAdmin):
 class TripFeedbackAdmin(admin.ModelAdmin):
     list_display = ("trip", "nickname", "created_at")
     search_fields = ("trip__trip_id", "body")
+
+
+@admin.register(TripContribution)
+class TripContributionAdmin(admin.ModelAdmin):
+    list_display = ("trip", "name", "created_at")
+    search_fields = ("trip__trip_id", "name")

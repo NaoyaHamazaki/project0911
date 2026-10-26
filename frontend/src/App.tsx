@@ -3,8 +3,8 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import AdminSettingsPage from './pages/AdminSettingsPage'
 import CreatePage from './pages/CreatePage'
-import FeedbackPage from './pages/FeedbackPage'
 import HomePage from './pages/HomePage'
+import JoinPage from './pages/JoinPage'
 import MyTripsPage from './pages/MyTripsPage'
 import RequestsPage from './pages/RequestsPage'
 import ResultPage from './pages/ResultPage'
@@ -32,7 +32,7 @@ export default function App() {
         {/* 入力確認はSTEP4に統合した。古いリンク用に作成画面へ戻す。 */}
         <Route path="/confirm" element={<Navigate to="/create" replace />} />
         <Route path="/trip/:tripId" element={<ResultPage />} />
-        <Route path="/trip/:tripId/feedback" element={<FeedbackPage />} />
+        <Route path="/join/:joinKey" element={<JoinPage />} />
         <Route path="/my-trips" element={<MyTripsPage />} />
         <Route path="/requests" element={<RequestsPage />} />
         <Route path="/admin-settings" element={<AdminSettingsPage />} />

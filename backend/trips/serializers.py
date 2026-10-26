@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .lodging import normalize_lodging
-from .models import FeatureRequest, TripFeedback, TripRequest
+from .models import FeatureRequest, TripContribution, TripFeedback, TripRequest
 
 
 class TripRequestSerializer(serializers.ModelSerializer):
@@ -25,6 +25,7 @@ class TripRequestSerializer(serializers.ModelSerializer):
             "must_spots", "want_spots",
             "schedule_paces", "schedule_pace_other", "schedule_paces_label",
             "rough_plans", "constraints", "ng_items", "notes", "free_notes", "collect_feedback",
+            "image_enabled", "image_mood", "join_key",
             "design_taste", "design_taste_other", "design_taste_label",
             "color_image", "color_image_other", "color_image_label",
             "aspect_ratio", "aspect_ratio_other", "aspect_ratio_label",
@@ -81,3 +82,9 @@ class TripFeedbackSerializer(serializers.ModelSerializer):
             },
             "nickname": {"required": False, "allow_blank": True},
         }
+
+
+class TripContributionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TripContribution
+        fields = ["id", "name", "must_spots", "want_spots", "constraints", "rough_plans", "created_at"]
