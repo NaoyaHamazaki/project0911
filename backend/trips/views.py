@@ -307,13 +307,16 @@ class SpotSuggestView(APIView):
         lodgings = [item for item in lodgings if item.get("mode")]
         exclude = [str(item).strip()[:100] for item in (payload.get("exclude") or []) if str(item).strip()][:50]
         if not spots.is_enabled():
-            return Response({"enabled": False, "results": []})
+            return Response({"enabled": False, "groups": []})
         if not destination and not any(item.get("value") for item in lodgings):
             return Response(
                 {"errors": [{"field": "destination", "message": "行先か宿泊先を入力すると候補を出せます。"}]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response({"enabled": True, "results": spots.suggest_spots(theme, destination, lodgings, exclude)})
+        groups = spots.suggest_spots(
+            theme, destination, lodgings, payload.get("date_from"), payload.get("date_to"), exclude
+        )
+        return Response({"enabled": True, "groups": groups})
 
 
 class FeatureRequestListCreateView(APIView):

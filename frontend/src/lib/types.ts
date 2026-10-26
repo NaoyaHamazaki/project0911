@@ -256,6 +256,18 @@ export type JoinInfo = {
 /** いきたいスポットのAI候補 */
 export type SpotSuggestion = {
   name: string
+  /** 観光・グルメ・体験・ショッピング・自然・夜景・ナイト */
+  category: string
   summary: string
   recommended_for: string
+  /** 出典。Google Places で確認できた場合は住所・公式サイトも入る */
+  address: string
+  maps_url: string
+  website: string
+}
+
+/** 地域（都市）ごとにまとめたAI候補 */
+export type SpotSuggestionGroup = {
+  area: string
+  spots: SpotSuggestion[]
 }

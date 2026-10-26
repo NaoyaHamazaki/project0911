@@ -57,6 +57,9 @@ const FIELD_STEP: Record<string, number> = {
 
 const filled = (values: string[]) => values.map((value) => value.trim()).filter(Boolean)
 
+// 画像のテーマの選択肢。選ぶと自由入力欄にその文言が入る（自由入力もそのまま使える）。
+const IMAGE_MOODS = ['水彩・手描き風', 'レトロなポスター風', 'ポップでカラフル', 'シンプル・ミニマル', '写真風・リアル']
+
 export default function CreatePage() {
   const navigate = useNavigate()
   const [form, setForm] = useState<TripForm>(() => loadDraft())
@@ -73,6 +76,7 @@ export default function CreatePage() {
   const [consistencyWarnings, setConsistencyWarnings] = useState<string[]>([])
   const [confirmedWarnings, setConfirmedWarnings] = useState<Record<number, boolean>>({})
   // 意見募集リンク（ポップアップ）と、参加者から届いた追記
+  const [joinOpen, setJoinOpen] = useState(false)
   const [joinUrl, setJoinUrl] = useState('')
   const [joinSavedTripId, setJoinSavedTripId] = useState<string | null>(null)
   const [joinLoading, setJoinLoading] = useState(false)
@@ -209,6 +213,9 @@ export default function CreatePage() {
 
   // 意見募集リンクを開く。新規作成中なら、リンクを発行するためにここまでの入力を一度保存する。
   const openJoinLink = async () => {
+    // ポップアップは先に開き、リンクの準備中はスピナーを出す。
+    setJoinOpen(true)
+    setJoinUrl('')
     setJoinLoading(true)
     setBusinessErrors([])
     setAppError(null)
@@ -226,6 +233,7 @@ export default function CreatePage() {
       setJoinSavedTripId(savedNow)
       setJoinUrl(`${window.location.origin}/join/${join_key}`)
     } catch (error) {
+      setJoinOpen(false)
       showErrors(error)
     } finally {
       setJoinLoading(false)
@@ -482,7 +490,7 @@ export default function CreatePage() {
                   onClick={() => void openJoinLink()}
                   disabled={joinLoading}
                 >
-                  {joinLoading ? '準備中...' : '意見を集める'}
+                  意見を集める
                 </button>
               </div>
             </div>
@@ -528,6 +536,8 @@ export default function CreatePage() {
                 theme={form.theme}
                 destination={form.destination}
                 lodgings={form.lodgings}
+                dateFrom={form.date_from}
+                dateTo={form.date_to}
                 added={{ must: filled(form.must_spots), want: filled(form.want_spots) }}
                 onAdd={addSpot}
               />
@@ -627,13 +637,27 @@ export default function CreatePage() {
                   <label className="field__label" htmlFor="image-mood">
                     画像のテーマ
                   </label>
-                  <p className="field__hint">画像の雰囲気。空欄なら旅のテーマや行先に合わせておまかせになります。</p>
+                  <p className="field__hint">画像の雰囲気。選択肢から選ぶか、自由に入力してください。空欄ならおまかせになります。</p>
+                  <div className="choice-chips" role="radiogroup" aria-label="画像のテーマ">
+                    {IMAGE_MOODS.map((mood) => (
+                      <button
+                        key={mood}
+                        type="button"
+                        role="radio"
+                        aria-checked={form.image_mood === mood}
+                        className={form.image_mood === mood ? 'chip chip--selected' : 'chip'}
+                        onClick={() => update('image_mood', form.image_mood === mood ? '' : mood)}
+                      >
+                        {mood}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     id="image-mood"
                     type="text"
                     className="input"
                     value={form.image_mood}
-                    placeholder="例）水彩風、レトロなポスター風"
+                    placeholder="例）和モダン、北欧風のイラスト"
                     onChange={(event) => update('image_mood', event.target.value)}
                   />
                 </div>
@@ -647,15 +671,6 @@ export default function CreatePage() {
                   otherText={form.aspect_ratio_other}
                   onOtherTextChange={(value) => update('aspect_ratio_other', value)}
                 />
-                {form.aspect_ratio && (
-                  <button
-                    type="button"
-                    className="field-shortcut"
-                    onClick={() => setForm((current) => ({ ...current, aspect_ratio: '', aspect_ratio_other: '' }))}
-                  >
-                    サイズはおまかせにする
-                  </button>
-                )}
               </div>
             )}
           </section>
@@ -732,8 +747,13 @@ export default function CreatePage() {
         </div>
       </form>
 
-      {joinUrl && (
-        <JoinLinkModal url={joinUrl} savedTripId={joinSavedTripId} onClose={() => setJoinUrl('')} />
+      {joinOpen && (
+        <JoinLinkModal
+          url={joinUrl}
+          loading={joinLoading}
+          savedTripId={joinSavedTripId}
+          onClose={() => setJoinOpen(false)}
+        />
       )}
     </div>
   )

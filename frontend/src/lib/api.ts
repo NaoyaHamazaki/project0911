@@ -7,7 +7,7 @@ import type {
   Lodging,
   Options,
   PlaceSuggestion,
-  SpotSuggestion,
+  SpotSuggestionGroup,
   PromptSettingItem,
   TableInfo,
   Trip,
@@ -124,8 +124,15 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  suggestSpots: (payload: { theme: string; destination: string; lodgings: Lodging[]; exclude: string[] }) =>
-    request<{ enabled: boolean; results: SpotSuggestion[] }>('/api/spots/suggest/', {
+  suggestSpots: (payload: {
+    theme: string
+    destination: string
+    lodgings: Lodging[]
+    date_from: string
+    date_to: string
+    exclude: string[]
+  }) =>
+    request<{ enabled: boolean; groups: SpotSuggestionGroup[] }>('/api/spots/suggest/', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
