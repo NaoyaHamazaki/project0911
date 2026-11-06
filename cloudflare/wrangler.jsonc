@@ -1,0 +1,25 @@
+// Cloudflare Workers（前段）の設定。
+// 画面（frontend/dist）は Workers の静的配信から直接返し、
+// /api/・/admin/・/static/ だけ Worker（src/index.js）が Django（Railway）へ転送する。
+// 静的ファイルへのアクセスでは Worker は起動しない（無料枠の1日10万リクエストに数えられない）。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tabi-shiori",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "../frontend/dist",
+    "binding": "ASSETS",
+    // React Router のURL（/create, /trip/xxx, /join/xxx など）は index.html を返す。
+    "not_found_handling": "single-page-application",
+    // ここに挙げたパスだけ、静的ファイルより先に Worker を通す。
+    "run_worker_first": ["/api/*", "/admin/*", "/static/*"]
+  },
+  "vars": {
+    // 転送先の Django。ローカル確認時は .dev.vars で上書きする。
+    "BACKEND_ORIGIN": "https://project0911-production.up.railway.app"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

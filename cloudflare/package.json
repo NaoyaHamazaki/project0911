@@ -1,0 +1,14 @@
+{
+  "name": "tabi-shiori-edge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:frontend": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
+    "dev": "wrangler dev",
+    "deploy": "npm run build:frontend && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}
