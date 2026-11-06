@@ -14,6 +14,7 @@ import type {
   TripForm,
   TripSummary,
 } from './types'
+import { getDeviceKey } from './storage'
 
 /**
  * ビジネスエラー（入力内容の誤り）。確認ページで項目ごとに表示する。
@@ -38,6 +39,10 @@ export class AppError extends Error {
     this.status = status
   }
 }
+
+// AI（Gemini/Places）を呼ぶAPIには端末キーを付ける。
+// Cloudflare 側（cloudflare/src/index.js）で、端末ごとの回数制限に使う。
+const aiHeaders = () => ({ 'Content-Type': 'application/json', 'X-Device-Key': getDeviceKey() })
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
@@ -87,7 +92,7 @@ export const api = {
   validateTrip: (form: TripForm) =>
     request<{ errors: FieldError[]; prompt_text: string; image_prompt_text: string; consistency_warnings: string[] }>(
       '/api/trips/validate/',
-      { method: 'POST', body: JSON.stringify(form) },
+      { method: 'POST', headers: aiHeaders(), body: JSON.stringify(form) },
     ),
 
   createTrip: (form: TripForm, deviceKey: string) =>
@@ -142,6 +147,7 @@ export const api = {
   }) =>
     request<{ enabled: boolean; groups: SpotSuggestionGroup[] }>('/api/spots/suggest/', {
       method: 'POST',
+      headers: aiHeaders(),
       body: JSON.stringify(payload),
     }),
 

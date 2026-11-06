@@ -15,6 +15,16 @@
     // ここに挙げたパスだけ、静的ファイルより先に Worker を通す。
     "run_worker_first": ["/api/*", "/admin/*", "/static/*"]
   },
+  // AIを呼ぶAPIの回数制限（src/index.js の LIMITED_ROUTES で使う）。period は 10 か 60（秒）のみ。
+  // Cloudflare の拠点ごとの概算カウントなので、上限ちょうどで止まるとは限らない。
+  "ratelimits": [
+    // AIのおすすめ候補（1回あたり Gemini 1回 + Places 最大18回）
+    { "name": "SPOT_DEVICE_LIMITER", "namespace_id": "1001", "simple": { "limit": 4, "period": 60 } },
+    { "name": "SPOT_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+    // 入力内容の確認（Gemini の整合性チェック 1回）
+    { "name": "CHECK_DEVICE_LIMITER", "namespace_id": "1003", "simple": { "limit": 6, "period": 60 } },
+    { "name": "CHECK_IP_LIMITER", "namespace_id": "1004", "simple": { "limit": 40, "period": 60 } }
+  ],
   "vars": {
     // 転送先の Django。ローカル確認時は .dev.vars で上書きする。
     "BACKEND_ORIGIN": "https://project0911-production.up.railway.app"

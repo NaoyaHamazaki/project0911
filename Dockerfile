@@ -35,4 +35,6 @@ COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 EXPOSE 8000
 
 # migrate と collectstatic は起動のたびに実行する（べき等なので毎回実行して問題ない）。
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2"]
+# AI候補（Gemini/Places）など外部APIの応答待ちが長い処理があるため、スレッド方式(gthread)にして
+# 待っている間も別のリクエストを処理できるようにする（2プロセス×8スレッド＝同時16件）。
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --worker-class gthread --workers 2 --threads 8 --timeout 60"]
