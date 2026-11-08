@@ -32,6 +32,25 @@ async function checkRateLimit(request, env, url) {
   )
 }
 
+// Railway の Serverless でスリープ中の Django は、起きるまでの最初のリクエストに 502/503 を返すことがある。
+// その場合は Django にまだ届いていないので、少し待って再送する（利用者にはエラーを見せない）。
+// 504（タイムアウト）は Django が処理中だった可能性があるため再送しない。
+const WAKE_RETRY_STATUSES = [502, 503]
+const WAKE_RETRY_DELAYS_MS = [1500, 3000]
+
+async function fetchWithWakeRetry(url, init) {
+  for (let attempt = 0; ; attempt++) {
+    const isLast = attempt >= WAKE_RETRY_DELAYS_MS.length
+    try {
+      const response = await fetch(url, init)
+      if (isLast || !WAKE_RETRY_STATUSES.includes(response.status)) return response
+    } catch (error) {
+      if (isLast) throw error
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_DELAYS_MS[attempt]))
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -49,10 +68,12 @@ export default {
     headers.set('X-Forwarded-Host', url.host)
     headers.set('X-Forwarded-Proto', url.protocol.replace(':', ''))
 
-    const response = await fetch(backend, {
+    // 再送できるように、本文は先に読み込んでおく（APIの本文は小さいJSONなので問題ない）。
+    const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer()
+    const response = await fetchWithWakeRetry(backend, {
       method: request.method,
       headers,
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      body,
       // 管理画面のログイン後リダイレクトなどは、ブラウザにそのまま返す。
       redirect: 'manual',
     })

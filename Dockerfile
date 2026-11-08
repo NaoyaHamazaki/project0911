@@ -32,9 +32,14 @@ COPY backend/ ./
 # 一致させるため、/app/frontend/dist に配置する（BASE_DIR = /app/backend）。
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 
+# 静的ファイルの収集はビルド時に1回だけ行う（起動を速くするため）。
+# ビルド時は Railway の環境変数が無いのでローカル既定値（DEBUG=1・仮のSECRET_KEY）で動くが、collectstatic には影響しない。
+RUN python manage.py collectstatic --noinput
+
 EXPOSE 8000
 
-# migrate と collectstatic は起動のたびに実行する（べき等なので毎回実行して問題ない）。
+# migrate は railway.json の preDeployCommand でデプロイ時に1回だけ実行する。
+# Railway の Serverless でスリープから起きるたびに migrate が走ると、最初の表示が遅くなるため起動コマンドには含めない。
 # AI候補（Gemini/Places）など外部APIの応答待ちが長い処理があるため、スレッド方式(gthread)にして
 # 待っている間も別のリクエストを処理できるようにする（2プロセス×8スレッド＝同時16件）。
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --worker-class gthread --workers 2 --threads 8 --timeout 60"]
+CMD ["sh", "-c", "gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --worker-class gthread --workers 2 --threads 8 --timeout 60"]
