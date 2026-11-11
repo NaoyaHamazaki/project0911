@@ -33,7 +33,7 @@
   ],
   "vars": {
     // 転送先の Django。ローカル確認時は .dev.vars で上書きする。
-    "BACKEND_ORIGIN": "https://project0911-production.up.railway.app"
+    "BACKEND_ORIGIN": "https://tabishiori-production.up.railway.app"
   },
   "observability": {
     "enabled": true

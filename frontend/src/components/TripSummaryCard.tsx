@@ -39,7 +39,7 @@ function Text({ value, empty = '未入力' }: { value: string; empty?: string })
   return <>{value || <span className="summary__empty">{empty}</span>}</>
 }
 
-/** 入力内容の一覧。STEP5のあとの「入力内容の確認」で表示する。 */
+/** 入力内容の一覧。STEP6のあとの「入力内容の確認」で表示する。 */
 export default function TripSummaryCard({ form, options }: { form: TripForm; options: Options }) {
   const nights = nightsBetween(form.date_from, form.date_to)
   const other = options.other_value

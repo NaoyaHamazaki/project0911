@@ -207,7 +207,7 @@ export default function ResultPage() {
         <section className="card">
           <h2 className="card__title">一緒に行く人からの意見（{contributions.length}件）</h2>
           <p className="field__hint">
-            届いた意見は自動では反映されません。「再編集」のSTEP3・STEP4で、取り込む項目を選んでください。
+            届いた意見は自動では反映されません。「再編集」のSTEP4・STEP5で、取り込む項目を選んでください。
           </p>
           <div className="feedback-url">
             <code className="feedback-url__text">{joinUrl}</code>

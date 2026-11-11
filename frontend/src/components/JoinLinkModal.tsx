@@ -69,7 +69,7 @@ export default function JoinLinkModal({ url, loading, savedTripId, onClose }: Pr
         ) : (
           <>
             <p className="modal__text">
-              このリンクを送ると、名前を入れて「いきたいところ」「予定」を追記してもらえます。追記された内容は、STEP3・STEP4の各欄の下に表示され、取り込むものを選べます。
+              このリンクを送ると、名前を入れて「いきたいところ」「予定」を追記してもらえます。追記された内容は、STEP4・STEP5の各欄の下に表示され、取り込むものを選べます。
             </p>
             {savedTripId && (
               <p className="modal__text">

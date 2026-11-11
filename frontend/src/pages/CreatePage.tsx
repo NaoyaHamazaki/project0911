@@ -32,9 +32,9 @@ import {
   type TripForm,
 } from '../lib/types'
 
-// 序盤の入力の負担感を減らすため、1ページの入力量を絞って5ステップに分けている。
+// 序盤の入力の負担感を減らして離脱を防ぐため、1ページの入力量を絞って6ステップに分けている。
 // 最後のステップのあとに「入力内容の確認」ページ（CONFIRM_STEP）がある。
-const STEP_LABELS = ['旅の基本', '宿泊先', 'いきたいところ（場所）', '予定', '出力設定']
+const STEP_LABELS = ['旅の基本', '日程と行先', '宿泊先', 'いきたいところ（場所）', '予定', '出力設定']
 const LAST_INPUT_STEP = STEP_LABELS.length - 1
 const CONFIRM_STEP = STEP_LABELS.length
 
@@ -43,21 +43,21 @@ const CONFIRM_STEP = STEP_LABELS.length
 const FIELD_STEP: Record<string, number> = {
   title: 0,
   theme: 0,
-  departure: 0,
   destination_scope: 0,
-  destination: 0,
-  date_from: 0,
-  date_to: 0,
-  lodgings: 1,
-  must_spots: 2,
-  want_spots: 2,
-  spot_notes: 2,
-  rough_plans: 3,
-  constraints: 3,
-  free_notes: 3,
-  image_mood: 4,
-  aspect_ratio: 4,
-  aspect_ratio_other: 4,
+  departure: 1,
+  destination: 1,
+  date_from: 1,
+  date_to: 1,
+  lodgings: 2,
+  must_spots: 3,
+  want_spots: 3,
+  spot_notes: 3,
+  rough_plans: 4,
+  constraints: 4,
+  free_notes: 4,
+  image_mood: 5,
+  aspect_ratio: 5,
+  aspect_ratio_other: 5,
 }
 
 const filled = (values: string[]) => values.map((value) => value.trim()).filter(Boolean)
@@ -136,7 +136,7 @@ export default function CreatePage() {
     })
   }, [nights, days])
 
-  // 保存済みの旅を編集中なら、参加者からの追記を読み込む（STEP3・4を開くたびに最新化）。
+  // 保存済みの旅を編集中なら、参加者からの追記を読み込む（STEP4・5を開くたびに最新化）。
   const loadContributions = useCallback(async () => {
     if (!editingTripId) {
       setContributions([])
@@ -150,7 +150,7 @@ export default function CreatePage() {
   }, [editingTripId])
 
   useEffect(() => {
-    if (step === 2 || step === 3) void loadContributions()
+    if (step === 3 || step === 4) void loadContributions()
   }, [step, loadContributions])
 
   const update = <K extends keyof TripForm>(key: K, value: TripForm[K]) => {
@@ -181,15 +181,17 @@ export default function CreatePage() {
   // 既存の旅の再編集では、後から必須にした項目が空の旅もあるため、注意を出すだけで先に進める。
   const missingFields = (target: number): string[] => {
     if (target === 0) {
+      return form.title.trim() ? [] : ['title']
+    }
+    if (target === 1) {
       const missing: string[] = []
-      if (!form.title.trim()) missing.push('title')
       if (!form.departure.trim()) missing.push('departure')
       if (!form.date_from) missing.push('date_from')
       if (!form.date_to) missing.push('date_to')
       if (!form.destination.trim()) missing.push('destination')
       return missing
     }
-    if (target === 1 && hasPeriod) {
+    if (target === 2 && hasPeriod) {
       return form.lodgings.some((lodging) => !lodging.value.trim()) ? ['lodgings'] : []
     }
     return []
@@ -226,7 +228,7 @@ export default function CreatePage() {
     }
   }
 
-  // STEP5の次：サーバーで入力チェックと行先の整合性チェックをしてから確認ページへ。
+  // STEP6の次：サーバーで入力チェックと行先の整合性チェックをしてから確認ページへ。
   const goConfirm = async () => {
     setChecking(true)
     setBusinessErrors([])
@@ -436,22 +438,6 @@ export default function CreatePage() {
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="departure">
-                出発地<span className="field__required">必須</span>
-              </label>
-              <p className="field__hint">旅の出発・帰着の場所。行先の候補や移動時間の見積もりに使います。</p>
-              <input
-                id="departure"
-                type="text"
-                className={isMissing('departure') ? 'input input--error' : 'input'}
-                value={form.departure}
-                placeholder="例）東京"
-                onChange={(event) => update('departure', event.target.value)}
-              />
-              {isMissing('departure') && <p className="field__error">出発地を入力してください。</p>}
-            </div>
-
-            <div className="field">
               <span className="field__label">行先の範囲</span>
               <p className="field__hint">行先の候補を出すときに使います。</p>
               <div className="choice-chips" role="radiogroup" aria-label="行先の範囲">
@@ -471,6 +457,36 @@ export default function CreatePage() {
                   )
                 })}
               </div>
+            </div>
+
+          </section>
+        )}
+
+        {step === 1 && (
+          <section className="card">
+            <h2 className="card__title">日程と行先</h2>
+            {showMissing && missingNow.length > 0 && (
+              <p className="step-notice">
+                {editingTripId
+                  ? '未入力の必須項目があります（編集中のため、このまま先に進めます）。'
+                  : '未入力の必須項目があります。入力してから次へ進んでください。'}
+              </p>
+            )}
+
+            <div className="field">
+              <label className="field__label" htmlFor="departure">
+                出発地<span className="field__required">必須</span>
+              </label>
+              <p className="field__hint">旅の出発・帰着の場所。行先の候補や移動時間の見積もりに使います。</p>
+              <input
+                id="departure"
+                type="text"
+                className={isMissing('departure') ? 'input input--error' : 'input'}
+                value={form.departure}
+                placeholder="例）東京"
+                onChange={(event) => update('departure', event.target.value)}
+              />
+              {isMissing('departure') && <p className="field__error">出発地を入力してください。</p>}
             </div>
 
             <div className="field">
@@ -545,7 +561,7 @@ export default function CreatePage() {
           </section>
         )}
 
-        {step === 1 && (
+        {step === 2 && (
           <section className="card">
             <h2 className="card__title">宿泊先</h2>
             <div className="field">
@@ -553,7 +569,7 @@ export default function CreatePage() {
                 宿泊先<span className="field__required">必須</span>
               </span>
               {!hasPeriod ? (
-                <p className="field__hint">STEP1で日程を入力すると、泊数ぶんの欄が出ます。</p>
+                <p className="field__hint">STEP2で日程を入力すると、泊数ぶんの欄が出ます。</p>
               ) : isDayTrip ? (
                 <p className="field__hint">日帰りのため宿泊先の入力は不要です。そのまま次へ進んでください。</p>
               ) : (
@@ -596,7 +612,7 @@ export default function CreatePage() {
           </section>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <section className="card">
             <div className="card__header">
               <h2 className="card__title">いきたいところ（場所）</h2>
@@ -678,7 +694,7 @@ export default function CreatePage() {
           </section>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <section className="card">
             <h2 className="card__title">予定</h2>
 
@@ -753,7 +769,7 @@ export default function CreatePage() {
           </section>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <section className="card">
             <h2 className="card__title">出力設定</h2>
             <p className="field__hint">旅の行程表プロンプトは必ず出力されます。しおりの表紙画像も作りたい場合はチェックしてください。</p>

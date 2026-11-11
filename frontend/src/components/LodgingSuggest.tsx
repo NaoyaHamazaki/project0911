@@ -16,7 +16,7 @@ type Props = {
 }
 
 /**
- * STEP2の宿泊先のAI候補。泊ごとに5件ずつ、提案理由とGoogleマップ・公式サイトのリンクを付けて出す。
+ * STEP3の宿泊先のAI候補。泊ごとに5件ずつ、提案理由とGoogleマップ・公式サイトのリンクを付けて出す。
  * 「この泊にする」で、その泊の宿名欄に入る。もう一度押すと、表示中の宿を除いて出し直す。
  */
 export default function LodgingSuggest({
@@ -80,7 +80,7 @@ export default function LodgingSuggest({
           ? `行先・日程・テーマをもとに、泊ごとに5件ずつ提案します。${
               lodgings.length > maxNights ? `（${maxNights}泊目までの提案になります）` : ''
             }`
-          : 'STEP1で行先を入力すると候補を出せます。'}
+          : 'STEP2で行先を入力すると候補を出せます。'}
       </p>
       {loading && (
         <div className="spinner-row" role="status">

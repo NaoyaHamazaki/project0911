@@ -19,7 +19,7 @@ const mapEmbedUrl = (spot: SpotSuggestion, area: string) =>
   `https://maps.google.com/maps?q=${encodeURIComponent(spot.address || `${spot.name} ${area}`)}&output=embed&hl=ja`
 
 /**
- * テーマ・行先・STEP2の宿泊先・日程をもとに、AI（Gemini）がいきたいスポットの候補を出す。
+ * テーマ・行先・STEP3の宿泊先・日程をもとに、AI（Gemini）がいきたいスポットの候補を出す。
  * 複数の都市にまたがる旅は地域ごとに分け、件数は日数に応じて増減する。
  * 利用料を抑えるため、ボタンを押したときだけ取得する。
  */
@@ -66,7 +66,7 @@ export default function SpotSuggestions({ theme, destination, lodgings, dateFrom
       <p className="field__hint">
         {hasPlace
           ? '行先・宿泊先・日数をもとに提案します。気になる場所は［MUST］［WANT］で上のリストに追加できます。'
-          : 'STEP1の行先か、STEP2の宿泊先を入力すると候補を出せます。'}
+          : 'STEP2の行先か、STEP3の宿泊先を入力すると候補を出せます。'}
       </p>
       {loading && (
         <div className="spinner-row" role="status">
