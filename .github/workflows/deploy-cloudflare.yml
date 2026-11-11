@@ -1,0 +1,49 @@
+# main への push で、画面（frontend）をビルドして Cloudflare Workers にデプロイする。
+# Railway（Django）は push で自動デプロイされるので、これで両方の本番が揃って新しくなる。
+#
+# 事前に GitHub の Settings → Secrets and variables → Actions に次を登録しておく。
+#   CLOUDFLARE_API_TOKEN  : Cloudflare の APIトークン（テンプレート「Edit Cloudflare Workers」）
+#   CLOUDFLARE_ACCOUNT_ID : Cloudflare のアカウントID
+name: Deploy Cloudflare
+
+on:
+  push:
+    branches: [main]
+    # 画面か Cloudflare の設定が変わったときだけ動かす（バックエンドだけの変更では動かさない）
+    paths:
+      - "frontend/**"
+      - "cloudflare/**"
+      - ".github/workflows/deploy-cloudflare.yml"
+  # Actions タブから手動でも実行できるようにする
+  workflow_dispatch:
+
+# 連続で push したときは、古い実行を待たずに最新だけを反映する
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare/package-lock.json
+
+      - name: wrangler をインストール
+        working-directory: cloudflare
+        run: npm ci
+
+      - name: 画面をビルドして Cloudflare にデプロイ
+        working-directory: cloudflare
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -51,6 +51,19 @@ npm run deploy
 
 表示された `https://tabi-shiori.<アカウント>.workers.dev` が公開URLになる。
 
+### 自動デプロイ（GitHub Actions）
+
+main に push すると、`frontend/` か `cloudflare/` に変更があるときだけ
+`.github/workflows/deploy-cloudflare.yml` が上の `npm run deploy` を自動で実行する。
+GitHub の Actions タブの「Deploy Cloudflare」→「Run workflow」で手動実行もできる。
+
+事前に GitHub の Settings → Secrets and variables → Actions に登録しておく:
+
+| Secret | 内容 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare の My Profile → API Tokens で、テンプレート「Edit Cloudflare Workers」から作ったトークン |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のダッシュボード（Workers & Pages の右側など）に出ているアカウントID |
+
 ### Railway 側で必要な設定
 
 Django 管理画面（`/admin/`）に Cloudflare のURL経由でログインするため、Railway の Variables に追加する:
@@ -64,7 +77,6 @@ DJANGO_CSRF_TRUSTED_ORIGINS=https://tabi-shiori.<アカウント>.workers.dev
 ## 注意
 
 - Railway の URL（`*.up.railway.app`）にも引き続き直接アクセスできる。利用者には Cloudflare のURLだけを案内する。
-- 画面を変更したら `npm run deploy` で Cloudflare にも反映が必要（Railway への push だけでは Cloudflare 側の画面は更新されない）。
-  GitHub 連携で自動化する場合は、Cloudflare の Workers Builds でルートディレクトリを `cloudflare`、
-  ビルドコマンドを `npm run build:frontend`、デプロイコマンドを `npx wrangler deploy` に設定する。
+- 画面は Cloudflare から配信しているので、画面の変更は Cloudflare へのデプロイで本番に出る（上の自動デプロイで push 時に反映される）。
+- Railway のドメインを変えたら、`wrangler.jsonc` の `BACKEND_ORIGIN` も直してデプロイする（古いままだと API が 404 になる）。
 - 意見募集リンクやQRは、開いているドメインのURLで発行される（Cloudflare から発行すれば Cloudflare のURLになる）。
