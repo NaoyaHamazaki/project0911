@@ -50,6 +50,7 @@ export default function TripSummaryCard({ form, options }: { form: TripForm; opt
       <dl className="summary">
         <SummaryRow label="タイトル"><Text value={form.title} /></SummaryRow>
         <SummaryRow label="テーマ"><Text value={form.theme} /></SummaryRow>
+        <SummaryRow label="出発地"><Text value={form.departure} /></SummaryRow>
         <SummaryRow label="行先"><Text value={form.destination} /></SummaryRow>
         <SummaryRow label="期間">{formatPeriod(form.date_from, form.date_to)}</SummaryRow>
         {(form.meeting_place || form.dismissal_place) && (

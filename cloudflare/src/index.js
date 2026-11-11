@@ -11,6 +11,8 @@ const BACKEND_PREFIXES = ['/api/', '/admin/', '/static/']
 const LIMITED_ROUTES = [
   { method: 'POST', path: '/api/spots/suggest/', device: 'SPOT_DEVICE_LIMITER', ip: 'SPOT_IP_LIMITER', label: 'AIのおすすめ候補' },
   { method: 'POST', path: '/api/trips/validate/', device: 'CHECK_DEVICE_LIMITER', ip: 'CHECK_IP_LIMITER', label: '入力内容の確認' },
+  { method: 'POST', path: '/api/destinations/suggest/', device: 'DEST_DEVICE_LIMITER', ip: 'DEST_IP_LIMITER', label: '行先の候補' },
+  { method: 'POST', path: '/api/lodgings/suggest/', device: 'HOTEL_DEVICE_LIMITER', ip: 'HOTEL_IP_LIMITER', label: '宿の候補' },
 ]
 
 async function checkRateLimit(request, env, url) {

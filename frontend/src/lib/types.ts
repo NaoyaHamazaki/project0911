@@ -12,6 +12,8 @@ export type Options = {
   transports: Choice[]
   reservation_statuses: Choice[]
   lodging_modes: Choice[]
+  /** 行先の範囲（どちらでも／国内／海外） */
+  destination_scopes: Choice[]
   feature_request_categories: Choice[]
   other_value: string
   max_trip_days: number
@@ -19,6 +21,8 @@ export type Options = {
   place_suggest_enabled: boolean
   /** いきたいスポットのAI候補（Gemini）が使えるか */
   spot_suggest_enabled: boolean
+  /** 宿泊先のAI候補を出す泊数の上限 */
+  max_hotel_nights: number
   /** 管理者用プロンプト編集画面(/admin-settings)を出すかどうか。本番では基本false。 */
   admin_menu_enabled: boolean
 }
@@ -62,6 +66,10 @@ export function normalizeLodging(item: unknown): Lodging {
 export type TripForm = {
   title: string
   theme: string
+  /** 出発地（新規作成では必須） */
+  departure: string
+  /** 行先の範囲。any / domestic / overseas（空は「どちらでも」） */
+  destination_scope: string
   destination: string
   date_from: string
   date_to: string
@@ -163,6 +171,8 @@ export function tripToForm(trip: Trip): TripForm {
   return {
     title: trip.title,
     theme: trip.theme,
+    departure: trip.departure ?? '',
+    destination_scope: trip.destination_scope ?? '',
     destination: trip.destination,
     date_from: trip.date_from,
     date_to: trip.date_to,
@@ -201,6 +211,8 @@ export function tripToForm(trip: Trip): TripForm {
 export const emptyTripForm = (): TripForm => ({
   title: '',
   theme: '',
+  departure: '',
+  destination_scope: 'any',
   destination: '',
   date_from: '',
   date_to: '',
@@ -280,4 +292,29 @@ export type SpotSuggestion = {
 export type SpotSuggestionGroup = {
   area: string
   spots: SpotSuggestion[]
+}
+
+/** STEP1：行先のAI候補 */
+export type DestinationSuggestion = {
+  name: string
+  reason: string
+  highlights: string[]
+}
+
+/** STEP2：宿泊先のAI候補（1件） */
+export type HotelSuggestion = {
+  name: string
+  area: string
+  reason: string
+  address: string
+  maps_url: string
+  website: string
+}
+
+/** STEP2：泊ごとにまとめた宿泊先のAI候補 */
+export type HotelSuggestionNight = {
+  /** 何泊目か（1始まり） */
+  night: number
+  area: string
+  hotels: HotelSuggestion[]
 }

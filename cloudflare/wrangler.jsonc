@@ -23,7 +23,13 @@
     { "name": "SPOT_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
     // 入力内容の確認（Gemini の整合性チェック 1回）
     { "name": "CHECK_DEVICE_LIMITER", "namespace_id": "1003", "simple": { "limit": 6, "period": 60 } },
-    { "name": "CHECK_IP_LIMITER", "namespace_id": "1004", "simple": { "limit": 40, "period": 60 } }
+    { "name": "CHECK_IP_LIMITER", "namespace_id": "1004", "simple": { "limit": 40, "period": 60 } },
+    // 行先の候補（Gemini 1回）
+    { "name": "DEST_DEVICE_LIMITER", "namespace_id": "1005", "simple": { "limit": 6, "period": 60 } },
+    { "name": "DEST_IP_LIMITER", "namespace_id": "1006", "simple": { "limit": 40, "period": 60 } },
+    // 宿の候補（Gemini 1回 + Places 最大 泊数×7回）
+    { "name": "HOTEL_DEVICE_LIMITER", "namespace_id": "1007", "simple": { "limit": 4, "period": 60 } },
+    { "name": "HOTEL_IP_LIMITER", "namespace_id": "1008", "simple": { "limit": 30, "period": 60 } }
   ],
   "vars": {
     // 転送先の Django。ローカル確認時は .dev.vars で上書きする。

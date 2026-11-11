@@ -137,6 +137,8 @@ def normalize(data: dict) -> dict:
         "title": _as_text(data.get("title"))[:100],
         "theme": _as_text(data.get("theme"))[:200],
         "destination": _as_text(data.get("destination"))[:200],
+        "departure": _as_text(data.get("departure"))[:100],
+        "destination_scope": _as_text(data.get("destination_scope")),
         "date_from": _normalize_date(data.get("date_from")),
         "date_to": _normalize_date(data.get("date_to")),
         "outbound_transport": _as_text(data.get("outbound_transport")),
@@ -173,12 +175,21 @@ def normalize(data: dict) -> dict:
     }
 
 
-def validate(cleaned: dict) -> list:
-    """ビジネスエラーを検出して返す。空リストなら問題なし。"""
+def validate(cleaned: dict, is_new: bool = False) -> list:
+    """ビジネスエラーを検出して返す。空リストなら問題なし。
+
+    is_new=True（新規作成）のときだけ、後から必須にした出発地・行先を必須にする。
+    既存の旅の再編集では、これらが空でも保存できるようにしておく。
+    """
     errors = []
 
     if not cleaned["title"]:
         errors.append({"field": "title", "message": "タイトルを入力してください。"})
+    if is_new and not cleaned["departure"]:
+        errors.append({"field": "departure", "message": "出発地を入力してください。"})
+    if is_new and not cleaned["destination"]:
+        errors.append({"field": "destination", "message": "行先を入力してください。"})
+    _check_choice(cleaned, errors, "destination_scope", "行先の範囲", choices.DESTINATION_SCOPES, required=False)
 
     date_from = _parse_date(cleaned["date_from"])
     date_to = _parse_date(cleaned["date_to"])
@@ -252,9 +263,9 @@ def validate(cleaned: dict) -> list:
     return errors
 
 
-def normalize_and_validate(data: dict):
+def normalize_and_validate(data: dict, is_new: bool = False):
     cleaned = normalize(data)
-    return cleaned, validate(cleaned)
+    return cleaned, validate(cleaned, is_new)
 
 
 def normalize_and_validate_contribution(data: dict, days: int) -> tuple:

@@ -2,6 +2,8 @@
 export const FIELD_LABELS: Record<string, string> = {
   title: 'タイトル',
   theme: 'テーマ',
+  departure: '出発地',
+  destination_scope: '行先の範囲',
   destination: '行先',
   date_from: '期間（自）',
   date_to: '期間（至）',

@@ -11,6 +11,8 @@ urlpatterns = [
     path("trips/<str:trip_id>/contributions/", views.TripContributionListView.as_view()),
     path("join/<str:join_key>/", views.JoinView.as_view()),
     path("spots/suggest/", views.SpotSuggestView.as_view()),
+    path("destinations/suggest/", views.DestinationSuggestView.as_view()),
+    path("lodgings/suggest/", views.LodgingSuggestView.as_view()),
     path("feature-requests/", views.FeatureRequestListCreateView.as_view()),
     path("places/suggest/", views.PlaceSuggestView.as_view()),
     path("db-status/", views.TableStatusView.as_view()),

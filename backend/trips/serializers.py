@@ -18,7 +18,7 @@ class TripRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = TripRequest
         fields = [
-            "trip_id", "title", "theme", "destination", "date_from", "date_to",
+            "trip_id", "title", "theme", "departure", "destination_scope", "destination", "date_from", "date_to",
             "outbound_transport", "outbound_transport_other", "outbound_reservation",
             "return_transport", "return_transport_other", "return_reservation",
             "meeting_place", "dismissal_place", "lodgings",

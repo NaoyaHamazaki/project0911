@@ -38,8 +38,8 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-# migrate は railway.json の preDeployCommand でデプロイ時に1回だけ実行する。
-# Railway の Serverless でスリープから起きるたびに migrate が走ると、最初の表示が遅くなるため起動コマンドには含めない。
+# migrate は起動時に実行する（当てるものが無ければ1〜2秒で終わる）。
+# railway.json の preDeployCommand は実行されないことがあった（別プロジェクトで確認）ため使わない。
 # AI候補（Gemini/Places）など外部APIの応答待ちが長い処理があるため、スレッド方式(gthread)にして
 # 待っている間も別のリクエストを処理できるようにする（2プロセス×8スレッド＝同時16件）。
-CMD ["sh", "-c", "gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --worker-class gthread --workers 2 --threads 8 --timeout 60"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --worker-class gthread --workers 2 --threads 8 --timeout 60"]

@@ -2117,3 +2117,55 @@ img {
   padding-left: 1.2em;
   font-size: 0.85rem;
 }
+
+/* ---------- 必須項目の未入力表示（「次へ」を押したとき） ---------- */
+
+.field__error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.input--error,
+.lodging-list__input--error .input {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.step-notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* ---------- STEP1 行先の候補・STEP2 宿の候補 ---------- */
+
+.dest-suggest {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 地図を並べない候補カードは1列で表示する。 */
+.spot-card.dest-suggest__card,
+.spot-card.hotel-card {
+  display: block;
+}
+
+.dest-suggest__highlights {
+  margin: 0 0 4px;
+  padding-left: 1.2em;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+@media (min-width: 560px) {
+  .hotel-suggest__list {
+    grid-template-columns: 1fr 1fr;
+  }
+}

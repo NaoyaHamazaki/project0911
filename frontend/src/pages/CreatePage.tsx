@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import ChoiceField from '../components/ChoiceField'
 import ConstraintInputs from '../components/ConstraintInputs'
 import ContributionPanel from '../components/ContributionPanel'
+import DestinationSuggest from '../components/DestinationSuggest'
 import ErrorPanel from '../components/ErrorPanel'
 import JoinLinkModal from '../components/JoinLinkModal'
 import LodgingInputs from '../components/LodgingInputs'
+import LodgingSuggest from '../components/LodgingSuggest'
 import RepeatableInputs from '../components/RepeatableInputs'
 import SpotSuggestions from '../components/SpotSuggestions'
 import TripSummaryCard from '../components/TripSummaryCard'
@@ -41,6 +43,8 @@ const CONFIRM_STEP = STEP_LABELS.length
 const FIELD_STEP: Record<string, number> = {
   title: 0,
   theme: 0,
+  departure: 0,
+  destination_scope: 0,
   destination: 0,
   date_from: 0,
   date_to: 0,
@@ -76,6 +80,8 @@ export default function CreatePage() {
   const [checking, setChecking] = useState(false)
   const [overwriting, setOverwriting] = useState(false)
   const [step, setStep] = useState(0)
+  // 「次へ」を押したステップ。未入力の必須項目を赤く示すのは、一度押したあとだけにする。
+  const [attempted, setAttempted] = useState<Record<number, boolean>>({})
   // 行先との整合性チェックで気になる点が出た場合、ユーザーが確認したものだけ true になる。
   const [consistencyWarnings, setConsistencyWarnings] = useState<string[]>([])
   const [confirmedWarnings, setConfirmedWarnings] = useState<Record<number, boolean>>({})
@@ -171,7 +177,30 @@ export default function CreatePage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
+  // ステップごとの未入力の必須項目。新規作成ではこれが空になるまで「次へ」に進めない。
+  // 既存の旅の再編集では、後から必須にした項目が空の旅もあるため、注意を出すだけで先に進める。
+  const missingFields = (target: number): string[] => {
+    if (target === 0) {
+      const missing: string[] = []
+      if (!form.title.trim()) missing.push('title')
+      if (!form.departure.trim()) missing.push('departure')
+      if (!form.date_from) missing.push('date_from')
+      if (!form.date_to) missing.push('date_to')
+      if (!form.destination.trim()) missing.push('destination')
+      return missing
+    }
+    if (target === 1 && hasPeriod) {
+      return form.lodgings.some((lodging) => !lodging.value.trim()) ? ['lodgings'] : []
+    }
+    return []
+  }
+
   const goNext = () => {
+    if (!editingTripId && missingFields(step).length > 0) {
+      setAttempted((current) => ({ ...current, [step]: true }))
+      scrollToTop()
+      return
+    }
     setStep((current) => Math.min(current + 1, LAST_INPUT_STEP))
     scrollToTop()
   }
@@ -203,7 +232,7 @@ export default function CreatePage() {
     setBusinessErrors([])
     setAppError(null)
     try {
-      const result = await api.validateTrip(form)
+      const result = await api.validateTrip(form, editingTripId)
       setConsistencyWarnings(result.consistency_warnings)
       setConfirmedWarnings({})
       setStep(CONFIRM_STEP)
@@ -278,6 +307,7 @@ export default function CreatePage() {
     setContributions([])
     setConsistencyWarnings([])
     setConfirmedWarnings({})
+    setAttempted({})
     setStep(0)
   }
 
@@ -324,6 +354,10 @@ export default function CreatePage() {
 
   const suggestEnabled = options.place_suggest_enabled
   const isConfirm = step === CONFIRM_STEP
+  // 未入力の必須項目を示すか。新規は「次へ」を押したあと、編集中は常に（注意として）示す。
+  const showMissing = Boolean(editingTripId) || Boolean(attempted[step])
+  const missingNow = isConfirm ? [] : missingFields(step)
+  const isMissing = (field: string) => showMissing && missingNow.includes(field)
 
   return (
     <div className="page">
@@ -364,6 +398,14 @@ export default function CreatePage() {
           <section className="card">
             <h2 className="card__title">旅の基本</h2>
 
+            {showMissing && missingNow.length > 0 && (
+              <p className="step-notice">
+                {editingTripId
+                  ? '未入力の必須項目があります（編集中のため、このまま先に進めます）。'
+                  : '未入力の必須項目があります。入力してから次へ進んでください。'}
+              </p>
+            )}
+
             <div className="field">
               <label className="field__label" htmlFor="title">
                 タイトル<span className="field__required">必須</span>
@@ -371,11 +413,12 @@ export default function CreatePage() {
               <input
                 id="title"
                 type="text"
-                className="input"
+                className={isMissing('title') ? 'input input--error' : 'input'}
                 value={form.title}
                 placeholder="例）秋の京都ふたり旅"
                 onChange={(event) => update('title', event.target.value)}
               />
+              {isMissing('title') && <p className="field__error">タイトルを入力してください。</p>}
             </div>
 
             <div className="field">
@@ -393,18 +436,41 @@ export default function CreatePage() {
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="destination">
-                行先
+              <label className="field__label" htmlFor="departure">
+                出発地<span className="field__required">必須</span>
               </label>
-              <p className="field__hint">おおまかな方面で構いません。宿泊場所やスポットとの整合性チェックに使います。</p>
+              <p className="field__hint">旅の出発・帰着の場所。行先の候補や移動時間の見積もりに使います。</p>
               <input
-                id="destination"
+                id="departure"
                 type="text"
-                className="input"
-                value={form.destination}
-                placeholder="例）京都・関西方面"
-                onChange={(event) => update('destination', event.target.value)}
+                className={isMissing('departure') ? 'input input--error' : 'input'}
+                value={form.departure}
+                placeholder="例）東京"
+                onChange={(event) => update('departure', event.target.value)}
               />
+              {isMissing('departure') && <p className="field__error">出発地を入力してください。</p>}
+            </div>
+
+            <div className="field">
+              <span className="field__label">行先の範囲</span>
+              <p className="field__hint">行先の候補を出すときに使います。</p>
+              <div className="choice-chips" role="radiogroup" aria-label="行先の範囲">
+                {(options.destination_scopes ?? []).map((scope) => {
+                  const selected = (form.destination_scope || 'any') === scope.value
+                  return (
+                    <button
+                      key={scope.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      className={selected ? 'chip chip--selected' : 'chip'}
+                      onClick={() => update('destination_scope', scope.value)}
+                    >
+                      {scope.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="field">
@@ -451,7 +517,31 @@ export default function CreatePage() {
                   {isDayTrip ? '日帰りの旅程です。' : `${nights}泊${nights + 1}日の旅程です。`}
                 </p>
               )}
+              {(isMissing('date_from') || isMissing('date_to')) && (
+                <p className="field__error">日程（自・至）を入力してください。</p>
+              )}
             </div>
+
+            <DestinationSuggest
+              theme={form.theme}
+              departure={form.departure}
+              destinationScope={form.destination_scope}
+              dateFrom={form.date_from}
+              dateTo={form.date_to}
+              current={form.destination}
+              enabled={options.spot_suggest_enabled}
+              missing={isMissing('destination')}
+              onSelect={(name) => update('destination', name)}
+            >
+              <input
+                id="destination"
+                type="text"
+                className={isMissing('destination') ? 'input input--error' : 'input'}
+                value={form.destination}
+                placeholder="例）京都・関西方面"
+                onChange={(event) => update('destination', event.target.value)}
+              />
+            </DestinationSuggest>
           </section>
         )}
 
@@ -469,14 +559,37 @@ export default function CreatePage() {
               ) : (
                 <>
                   <p className="field__hint">
-                    泊ごとに「宿名（決まっている）」「検討エリア（場所だけ決めたい）」「おまかせ」から選んでください。
+                    泊ごとに宿名を入力してください。決まっていなければ「候補を出す」でAIに提案してもらえます。
                   </p>
+                  {showMissing && missingNow.length > 0 && (
+                    <p className="step-notice">
+                      {editingTripId
+                        ? '宿名が未入力の泊があります（編集中のため、このまま先に進めます）。'
+                        : '宿名が未入力の泊があります。入力してから次へ進んでください。'}
+                    </p>
+                  )}
                   <LodgingInputs
                     lodgings={form.lodgings}
                     onChange={(lodgings) => update('lodgings', lodgings)}
-                    modes={options.lodging_modes}
                     suggestEnabled={suggestEnabled}
+                    showErrors={showMissing}
                   />
+                  {options.spot_suggest_enabled && (
+                    <LodgingSuggest
+                      theme={form.theme}
+                      departure={form.departure}
+                      destination={form.destination}
+                      dateFrom={form.date_from}
+                      dateTo={form.date_to}
+                      lodgings={form.lodgings}
+                      maxNights={options.max_hotel_nights ?? 7}
+                      onSelect={(index, name) => {
+                        const list = [...form.lodgings]
+                        list[index] = { mode: 'name', value: name }
+                        update('lodgings', list)
+                      }}
+                    />
+                  )}
                 </>
               )}
             </div>

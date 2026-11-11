@@ -1,8 +1,10 @@
 import type {
   Constraint,
   Contribution,
+  DestinationSuggestion,
   FeatureRequestItem,
   FieldError,
+  HotelSuggestionNight,
   JoinInfo,
   Lodging,
   Options,
@@ -89,10 +91,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   options: () => request<Options>('/api/options/'),
 
-  validateTrip: (form: TripForm) =>
+  // 編集中の旅IDを渡すと、後から必須にした項目（出発地・行先）の空を許容する（既存データの再編集用）。
+  validateTrip: (form: TripForm, editingTripId: string | null) =>
     request<{ errors: FieldError[]; prompt_text: string; image_prompt_text: string; consistency_warnings: string[] }>(
       '/api/trips/validate/',
-      { method: 'POST', headers: aiHeaders(), body: JSON.stringify(form) },
+      { method: 'POST', headers: aiHeaders(), body: JSON.stringify({ ...form, editing_trip_id: editingTripId ?? '' }) },
     ),
 
   createTrip: (form: TripForm, deviceKey: string) =>
@@ -146,6 +149,34 @@ export const api = {
     exclude: string[]
   }) =>
     request<{ enabled: boolean; groups: SpotSuggestionGroup[] }>('/api/spots/suggest/', {
+      method: 'POST',
+      headers: aiHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  suggestDestinations: (payload: {
+    theme: string
+    departure: string
+    destination_scope: string
+    date_from: string
+    date_to: string
+    exclude: string[]
+  }) =>
+    request<{ enabled: boolean; destinations: DestinationSuggestion[] }>('/api/destinations/suggest/', {
+      method: 'POST',
+      headers: aiHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  suggestLodgings: (payload: {
+    theme: string
+    departure: string
+    destination: string
+    date_from: string
+    date_to: string
+    exclude: string[]
+  }) =>
+    request<{ enabled: boolean; nights: HotelSuggestionNight[] }>('/api/lodgings/suggest/', {
       method: 'POST',
       headers: aiHeaders(),
       body: JSON.stringify(payload),

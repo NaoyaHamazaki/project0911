@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import choices, consistency, spots
+from . import choices, consistency, spots, suggest
 from . import prompt as prompt_builder
 from . import providers, validators
 from .lodging import describe_lodging, normalize_lodgings
@@ -59,12 +59,14 @@ class OptionsView(APIView):
             "transports": _choice_payload(choices.TRANSPORTS),
             "reservation_statuses": _choice_payload(choices.RESERVATION_STATUSES),
             "lodging_modes": _choice_payload(choices.LODGING_MODES),
+            "destination_scopes": _choice_payload(choices.DESTINATION_SCOPES),
             "feature_request_categories": _choice_payload(FEATURE_REQUEST_CATEGORIES),
             "other_value": choices.OTHER,
             "max_trip_days": validators.MAX_TRIP_DAYS,
             "max_list_items": validators.MAX_LIST_ITEMS,
             "place_suggest_enabled": provider.enabled,
             "spot_suggest_enabled": spots.is_enabled(),
+            "max_hotel_nights": suggest.MAX_HOTEL_NIGHTS,
             "admin_menu_enabled": settings.ADMIN_MENU_ENABLED,
         })
 
@@ -166,7 +168,10 @@ class TripValidateView(APIView):
     """確認ページ用。保存せずにビジネスエラーの確認とプロンプトの試作を行う。"""
 
     def post(self, request):
-        cleaned, errors = validators.normalize_and_validate(request.data or {})
+        payload = request.data or {}
+        # 新規作成か（編集中でないか）は画面から受け取る。編集中は後から必須にした項目の空を許容する。
+        is_new = not str(payload.get("editing_trip_id") or "").strip()
+        cleaned, errors = validators.normalize_and_validate(payload, is_new=is_new)
         if errors:
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
         concerns = consistency.check_destination_consistency(cleaned)
@@ -188,7 +193,7 @@ class TripListCreateView(APIView):
         return Response({"results": TripRequestSummarySerializer(trips, many=True).data})
 
     def post(self, request):
-        cleaned, errors = validators.normalize_and_validate(request.data or {})
+        cleaned, errors = validators.normalize_and_validate(request.data or {}, is_new=True)
         if errors:
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -337,6 +342,57 @@ class SpotSuggestView(APIView):
             theme, destination, lodgings, payload.get("date_from"), payload.get("date_to"), exclude
         )
         return Response({"enabled": True, "groups": groups})
+
+
+def _clean_exclude(payload) -> list:
+    return [str(item).strip()[:100] for item in (payload.get("exclude") or []) if str(item).strip()][:50]
+
+
+class DestinationSuggestView(APIView):
+    """STEP1：テーマ・出発地・範囲・日程から、行先の候補を3件返す（Gemini）。"""
+
+    def post(self, request):
+        payload = request.data or {}
+        if not spots.is_enabled():
+            return Response({"enabled": False, "destinations": []})
+        if not payload.get("date_from") or not payload.get("date_to"):
+            return Response(
+                {"errors": [{"field": "date_from", "message": "日程を入力すると候補を出せます。"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        destinations = suggest.suggest_destinations(
+            str(payload.get("theme") or "").strip()[:200],
+            str(payload.get("departure") or "").strip()[:100],
+            str(payload.get("destination_scope") or "").strip(),
+            payload.get("date_from"),
+            payload.get("date_to"),
+            _clean_exclude(payload),
+        )
+        return Response({"enabled": True, "destinations": destinations})
+
+
+class LodgingSuggestView(APIView):
+    """STEP2：行先・日程などから、泊ごとに宿泊先の候補を返す（Gemini＋Placesで実在確認）。"""
+
+    def post(self, request):
+        payload = request.data or {}
+        if not spots.is_enabled():
+            return Response({"enabled": False, "nights": []})
+        destination = str(payload.get("destination") or "").strip()[:200]
+        if not destination:
+            return Response(
+                {"errors": [{"field": "destination", "message": "STEP1で行先を入力すると候補を出せます。"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        groups = suggest.suggest_hotels(
+            str(payload.get("theme") or "").strip()[:200],
+            str(payload.get("departure") or "").strip()[:100],
+            destination,
+            payload.get("date_from"),
+            payload.get("date_to"),
+            _clean_exclude(payload),
+        )
+        return Response({"enabled": True, "nights": groups})
 
 
 class FeatureRequestListCreateView(APIView):

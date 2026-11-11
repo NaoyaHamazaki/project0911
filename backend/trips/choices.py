@@ -62,6 +62,16 @@ RESERVATION_STATUSES = [
 ]
 
 # ---- 宿泊先の決め方（泊ごと） ----
+# 行先の候補を出すときの範囲。空は「どちらでも」として扱う。
+DESTINATION_SCOPE_ANY = "any"
+DESTINATION_SCOPE_DOMESTIC = "domestic"
+DESTINATION_SCOPE_OVERSEAS = "overseas"
+DESTINATION_SCOPES = [
+    (DESTINATION_SCOPE_ANY, "どちらでも"),
+    (DESTINATION_SCOPE_DOMESTIC, "国内"),
+    (DESTINATION_SCOPE_OVERSEAS, "海外"),
+]
+
 LODGING_NAME = "name"
 LODGING_AREA = "area"
 LODGING_OMAKASE = "omakase"

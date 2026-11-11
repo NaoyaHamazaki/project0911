@@ -67,6 +67,10 @@ class TripRequest(models.Model):
     return_transport_other = models.CharField("復路の交通手段(その他)", max_length=200, blank=True)
     return_reservation = models.CharField("復路の予約状況", max_length=20, blank=True)
 
+    # 出発地（新規作成では必須。既存データの再編集では空を許容する）と、行先の候補を出すときの範囲。
+    departure = models.CharField("出発地", max_length=100, blank=True)
+    destination_scope = models.CharField("行先の範囲", max_length=20, blank=True)
+
     meeting_place = models.CharField("集合場所", max_length=255, blank=True)
     dismissal_place = models.CharField("解散場所", max_length=255, blank=True)
 

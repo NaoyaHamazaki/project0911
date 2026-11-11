@@ -139,6 +139,8 @@ def build_prompt(cleaned: dict, contributions=None) -> str:
     ]
     if cleaned.get("theme"):
         lines.append(f"- テーマ: {cleaned['theme']}")
+    if cleaned.get("departure"):
+        lines.append(f"- 出発地: {cleaned['departure']}（初日はここから出発し、最終日はここへ帰る）")
     if cleaned.get("destination"):
         lines.append(f"- 行先: {cleaned['destination']}")
     lines += [

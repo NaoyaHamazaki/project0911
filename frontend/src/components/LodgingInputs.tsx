@@ -1,23 +1,23 @@
 import AddressInput from './AddressInput'
-import type { Choice, Lodging, LodgingMode } from '../lib/types'
+import type { Lodging } from '../lib/types'
 
 type Props = {
   lodgings: Lodging[]
   onChange: (lodgings: Lodging[]) => void
-  modes: Choice[]
   suggestEnabled: boolean
+  /** 未入力の泊を赤枠で示す（「次へ」を押したあと） */
+  showErrors?: boolean
 }
 
-const PLACEHOLDERS: Record<string, string> = {
-  name: '例）〇〇ホテル 京都',
-  area: '例）京都駅周辺、祇園あたり',
-}
-
-/** 泊ごとに「宿名／検討エリア／おまかせ」から決め方を選び、必要なら内容を入力する。 */
-export default function LodgingInputs({ lodgings, onChange, modes, suggestEnabled }: Props) {
-  const setAt = (index: number, next: Lodging) => {
+/**
+ * 泊ごとに宿名を入力する。
+ * 以前の「検討エリア」「おまかせ」は廃止した。過去データの検討エリアは宿名欄にそのまま表示し、
+ * 編集すると宿名（mode: name）として保存される。おまかせは空欄で表示される。
+ */
+export default function LodgingInputs({ lodgings, onChange, suggestEnabled, showErrors = false }: Props) {
+  const setAt = (index: number, value: string) => {
     const list = [...lodgings]
-    list[index] = next
+    list[index] = { mode: value.trim() ? 'name' : '', value }
     onChange(list)
   }
 
@@ -25,48 +25,28 @@ export default function LodgingInputs({ lodgings, onChange, modes, suggestEnable
     <div className="lodging-list">
       {lodgings.map((lodging, index) => {
         const previous = index > 0 ? lodgings[index - 1] : null
-        // 前の泊が決まっていて、この泊がまだ未選択なら「前泊と同じ」を出す。
-        const showSame = previous !== null && previous.mode !== '' && lodging.mode === ''
+        // 前の泊が入力済みで、この泊がまだ空なら「前泊と同じ」を出す。
+        const showSame = previous !== null && previous.value.trim() !== '' && lodging.value.trim() === ''
+        const missing = showErrors && !lodging.value.trim()
         return (
           <div className="lodging-list__row" key={index}>
             <div className="lodging-list__head">
               <span className="lodging-list__label">{index + 1}泊目</span>
               {showSame && (
-                <button type="button" className="field-shortcut" onClick={() => setAt(index, { ...previous })}>
+                <button type="button" className="field-shortcut" onClick={() => setAt(index, previous.value)}>
                   {index}泊目と同じ
                 </button>
               )}
             </div>
-            <div className="choice-chips" role="radiogroup" aria-label={`${index + 1}泊目の決め方`}>
-              {modes.map((mode) => (
-                <button
-                  key={mode.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={lodging.mode === mode.value}
-                  className={lodging.mode === mode.value ? 'chip chip--selected' : 'chip'}
-                  onClick={() =>
-                    setAt(index, {
-                      mode: mode.value as LodgingMode,
-                      // おまかせは内容不要。宿名⇔エリアの切り替えでは入力を残す。
-                      value: mode.value === 'omakase' ? '' : lodging.value,
-                    })
-                  }
-                >
-                  {mode.label}
-                </button>
-              ))}
+            <div className={missing ? 'lodging-list__input lodging-list__input--error' : 'lodging-list__input'}>
+              <AddressInput
+                value={lodging.value}
+                onChange={(value) => setAt(index, value)}
+                placeholder="例）〇〇ホテル 京都"
+                suggestEnabled={suggestEnabled}
+              />
             </div>
-            {(lodging.mode === 'name' || lodging.mode === 'area') && (
-              <div className="lodging-list__input">
-                <AddressInput
-                  value={lodging.value}
-                  onChange={(value) => setAt(index, { ...lodging, value })}
-                  placeholder={PLACEHOLDERS[lodging.mode]}
-                  suggestEnabled={suggestEnabled}
-                />
-              </div>
-            )}
+            {missing && <p className="field__error">{index + 1}泊目の宿名を入力してください。</p>}
           </div>
         )
       })}
