@@ -103,6 +103,8 @@ export type TripForm = {
   color_image_other: string
   aspect_ratio: string
   aspect_ratio_other: string
+  /** 「他の人が作った旅」に公開するか（個人情報を伏せた公開版だけが載る） */
+  is_public: boolean
 }
 
 export type FieldError = { field: string; message: string }
@@ -121,6 +123,58 @@ export type Trip = TripForm & {
   aspect_ratio_label: string
   created_at: string
   updated_at: string
+  /** published: 公開中 / blocked: 公開に向かない内容のため非公開 / failed: 公開版を作れず非公開 / '': 非公開 */
+  public_status: PublicStatus
+  /** 公開できなかった理由 */
+  public_note: string
+  /** 公開ページ（/public/<key>）のキー */
+  public_key: string
+}
+
+export type PublicStatus = '' | 'published' | 'blocked' | 'failed'
+
+/** 予約済みの予定（公開版）。日付の代わりに何日目かを持つ */
+export type PublicConstraint = { day: number | null; time: string; content: string }
+
+/** 「他の人が作った旅」に載せる公開版。人名などを伏せ、日付は月と泊数だけにしたもの */
+export type PublicTrip = {
+  title: string
+  theme: string
+  departure: string
+  destination: string
+  month_label: string
+  period_label: string
+  nights: number
+  days: number
+  lodgings: string[]
+  must_spots: string[]
+  want_spots: string[]
+  spot_notes: string
+  rough_plans: string[]
+  constraints: PublicConstraint[]
+  free_notes: string
+  image_mood: string
+  prompt_text: string
+  image_prompt_text: string
+  public_key?: string
+  published_at?: string
+}
+
+/** 確認ページで見せる公開版のプレビュー */
+export type PublicPreview = {
+  status: Exclude<PublicStatus, ''>
+  message: string
+  snapshot: PublicTrip | null
+}
+
+export type PublicTripSummary = {
+  public_key: string
+  title: string
+  theme: string
+  destination: string
+  month_label: string
+  period_label: string
+  published_at: string
 }
 
 export type TripSummary = {
@@ -130,6 +184,8 @@ export type TripSummary = {
   date_to: string
   nights: number
   created_at: string
+  is_public?: boolean
+  public_status?: PublicStatus
 }
 
 export type FeatureRequestItem = {
@@ -205,6 +261,7 @@ export function tripToForm(trip: Trip): TripForm {
     color_image_other: '',
     aspect_ratio: trip.aspect_ratio,
     aspect_ratio_other: trip.aspect_ratio_other,
+    is_public: Boolean(trip.is_public),
   }
 }
 
@@ -244,6 +301,8 @@ export const emptyTripForm = (): TripForm => ({
   color_image_other: '',
   aspect_ratio: '',
   aspect_ratio_other: '',
+  // 新しく作る旅は公開が初期値（STEP6で変えられる）
+  is_public: true,
 })
 
 /** 意見募集リンクから参加者が追記した内容 */

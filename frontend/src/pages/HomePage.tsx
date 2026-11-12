@@ -56,6 +56,10 @@ export default function HomePage() {
             <span className="home__link-title">この端末で作った旅</span>
             <span className="home__link-desc">ログインなしで、作成履歴をふり返れます</span>
           </Link>
+          <Link to="/public" className="home__link-card">
+            <span className="home__link-title">他の人が作った旅</span>
+            <span className="home__link-desc">みんなが公開した旅のプロンプトを参考にできます</span>
+          </Link>
           <Link to="/requests" className="home__link-card">
             <span className="home__link-title">アプリへの要望を送る</span>
             <span className="home__link-desc">こんな機能がほしい、を教えてください</span>

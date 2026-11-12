@@ -80,9 +80,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <header className={scrolled ? 'app-header app-header--scrolled' : 'app-header'}>
         <div className="app-header__inner">
           <Link to="/" className="app-header__logo">
-            <span className="app-header__mark" aria-hidden="true">
-              ✈
-            </span>
+            <img className="app-header__mark" src="/favicon.svg" alt="" width={28} height={28} />
             たびしおり
           </Link>
           <button

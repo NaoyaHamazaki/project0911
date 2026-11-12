@@ -41,6 +41,7 @@ export default function ResultPage() {
   // プロンプト本文はデフォルト非表示。「確認」ボタンでそれぞれ開閉する。
   const [visible, setVisible] = useState<Record<string, boolean>>({})
   const [contributions, setContributions] = useState<Contribution[]>([])
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
 
   const shareUrl = `${window.location.origin}/trip/${tripId}`
 
@@ -97,6 +98,23 @@ export default function ResultPage() {
       return
     }
     await handleCopy(`${shareText}\n${shareUrl}`, 'この端末は共有メニューに対応していないため、URLをコピーしました。')
+  }
+
+  // 「他の人が作った旅」への公開・非公開を切り替える。公開にするときは、今の内容から公開版を作り直す。
+  const changeVisibility = async (isPublic: boolean) => {
+    if (!trip) return
+    setVisibilityBusy(true)
+    try {
+      const updated = await api.setVisibility(trip.trip_id, isPublic)
+      setTrip(updated)
+      if (!isPublic) notify('非公開にしました')
+      else if (updated.public_status === 'published') notify('公開しました')
+      else notify('公開できませんでした')
+    } catch (error) {
+      notify(error instanceof AppError ? error.message : '公開設定を変更できませんでした。')
+    } finally {
+      setVisibilityBusy(false)
+    }
   }
 
   const handleReEdit = () => {
@@ -202,6 +220,60 @@ export default function ResultPage() {
             ))}
         </section>
       ))}
+
+      <section className="card">
+        <div className="card__header">
+          <h2 className="card__title">他の人への公開</h2>
+          <span className={trip.public_status === 'published' ? 'badge badge--public' : 'badge'}>
+            {trip.public_status === 'published' ? '公開中' : '非公開'}
+          </span>
+        </div>
+        {trip.public_status === 'published' ? (
+          <>
+            <p className="field__hint">
+              「他の人が作った旅」に、名前や連絡先などを伏せた内容が載っています。旅IDや一緒に行く人からの意見は載りません。
+            </p>
+            <div className="public-actions">
+              <Link to={`/public/${trip.public_key}`} className="button button--ghost button--small">
+                公開ページを見る
+              </Link>
+              <button
+                type="button"
+                className="button button--ghost button--small"
+                disabled={visibilityBusy}
+                onClick={() => void changeVisibility(false)}
+              >
+                {visibilityBusy ? '変更中...' : '非公開にする'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {trip.is_public && trip.public_note ? (
+              <p className="public-preview__warning">{trip.public_note}</p>
+            ) : (
+              <p className="field__hint">
+                公開すると「他の人が作った旅」に載ります。名前は「○○」に置き換え、連絡先や予約番号などは伏せ、日程は月と泊数だけにします。
+              </p>
+            )}
+            {trip.public_status !== 'blocked' && (
+              <div className="public-actions">
+                <button
+                  type="button"
+                  className="button button--primary button--small"
+                  disabled={visibilityBusy}
+                  onClick={() => void changeVisibility(true)}
+                >
+                  {visibilityBusy ? '公開版を作成中...' : trip.public_status === 'failed' ? 'もう一度公開する' : '公開する'}
+                </button>
+              </div>
+            )}
+            {trip.public_status === 'blocked' && (
+              <p className="field__hint">内容を直して公開したい場合は、「再編集」から直して保存してください。</p>
+            )}
+          </>
+        )}
+      </section>
 
       {joinUrl && (
         <section className="card">

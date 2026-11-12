@@ -13,10 +13,22 @@ const LIMITED_ROUTES = [
   { method: 'POST', path: '/api/trips/validate/', device: 'CHECK_DEVICE_LIMITER', ip: 'CHECK_IP_LIMITER', label: '入力内容の確認' },
   { method: 'POST', path: '/api/destinations/suggest/', device: 'DEST_DEVICE_LIMITER', ip: 'DEST_IP_LIMITER', label: '行先の候補' },
   { method: 'POST', path: '/api/lodgings/suggest/', device: 'HOTEL_DEVICE_LIMITER', ip: 'HOTEL_IP_LIMITER', label: '宿の候補' },
+  // 公開・非公開の切り替え（公開にするとき Gemini で公開版を作る）。パスに旅IDが入るので pattern で照合する。
+  // 上限は「入力内容の確認」と同じ枠を使う（key は path で分かれるので回数は別々に数える）。
+  {
+    method: 'POST',
+    path: '/api/trips/*/visibility/',
+    pattern: /^\/api\/trips\/[^/]+\/visibility\/$/,
+    device: 'CHECK_DEVICE_LIMITER',
+    ip: 'CHECK_IP_LIMITER',
+    label: '公開設定の変更',
+  },
 ]
 
 async function checkRateLimit(request, env, url) {
-  const route = LIMITED_ROUTES.find((item) => item.method === request.method && item.path === url.pathname)
+  const route = LIMITED_ROUTES.find(
+    (item) => item.method === request.method && (item.pattern ? item.pattern.test(url.pathname) : item.path === url.pathname),
+  )
   if (!route) return null
 
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown'

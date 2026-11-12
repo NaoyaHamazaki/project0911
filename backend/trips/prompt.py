@@ -118,10 +118,29 @@ def _prompt_settings() -> tuple:
     return intro, output_items, rules
 
 
-def build_prompt(cleaned: dict, contributions=None) -> str:
+def _period_line(cleaned: dict, period_label: str, public: bool) -> str:
+    """日程の行。公開版（public）は具体的な日付を出さず「○年○月ごろ」にする。"""
+    if public:
+        start = _parse_date(cleaned.get("date_from"))
+        month = f"{start.year}年{start.month}月ごろ" if start else "（時期は非公開）"
+        return f"{month}（{period_label}）"
+    return f"{_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）"
+
+
+def _constraint_when(row: dict) -> str:
+    """予約済みの予定の日時。公開版の行は日付の代わりに day（N日目）を持つ。"""
+    if row.get("day"):
+        day = f"{row['day']}日目"
+    else:
+        day = _format_date(row.get("date")) if row.get("date") else ""
+    return " ".join(part for part in [day, row.get("time") or ""] if part)
+
+
+def build_prompt(cleaned: dict, contributions=None, public: bool = False) -> str:
     """正規化済みの入力からプロンプト本文を生成する。
 
     contributions は意見募集リンクから届いた参加者の追記（dictのリスト）。
+    public=True は「他の人が作った旅」に載せる公開版（日付を伏せる）。
     """
     date_from = _parse_date(cleaned.get("date_from"))
     date_to = _parse_date(cleaned.get("date_to"))
@@ -143,9 +162,7 @@ def build_prompt(cleaned: dict, contributions=None) -> str:
         lines.append(f"- 出発地: {cleaned['departure']}（初日はここから出発し、最終日はここへ帰る）")
     if cleaned.get("destination"):
         lines.append(f"- 行先: {cleaned['destination']}")
-    lines += [
-        f"- 日程: {_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）",
-    ]
+    lines.append(f"- 日程: {_period_line(cleaned, period_label, public)}")
     # 交通手段・集合・解散場所は入力欄を廃止した。過去データに値があるときだけ載せる。
     for prefix, label in (("outbound", "往路の交通手段"), ("return", "復路の交通手段")):
         if cleaned.get(f"{prefix}_transport"):
@@ -194,7 +211,7 @@ def build_prompt(cleaned: dict, contributions=None) -> str:
     lines.append("- 予約済みの予定:")
     if constraints:
         for row in constraints:
-            when = " ".join(part for part in [_format_date(row.get("date")) if row.get("date") else "", row.get("time") or ""] if part)
+            when = _constraint_when(row)
             prefix = f"{when} " if when else ""
             lines.append(f"  - {prefix}{row.get('content', '')}".rstrip())
     else:
@@ -271,7 +288,7 @@ def _one_line(text: str) -> str:
     return " ".join(part.strip() for part in str(text).splitlines() if part.strip())
 
 
-def build_image_prompt(cleaned: dict) -> str:
+def build_image_prompt(cleaned: dict, public: bool = False) -> str:
     """画像生成AI向けのプロンプト（しおりの表紙・1枚もののビジュアル用）を生成する。
 
     行程の細かい時刻表は画像生成AIが苦手なため、ここでは旅の雰囲気・見出し・
@@ -286,7 +303,7 @@ def build_image_prompt(cleaned: dict) -> str:
         "",
         "# 画像に入れる文字（正確に表記すること）",
         f"- タイトル: {title}",
-        f"- 日程: {_format_date(cleaned.get('date_from'))} 〜 {_format_date(cleaned.get('date_to'))}（{period_label}）",
+        f"- 日程: {_period_line(cleaned, period_label, public)}",
     ]
     if cleaned.get("destination"):
         lines.append(f"- 行先: {cleaned['destination']}")

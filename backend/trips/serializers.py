@@ -30,6 +30,7 @@ class TripRequestSerializer(serializers.ModelSerializer):
             "color_image", "color_image_other", "color_image_label",
             "aspect_ratio", "aspect_ratio_other", "aspect_ratio_label",
             "prompt_text", "image_prompt_text", "nights", "days", "created_at", "updated_at",
+            "is_public", "public_status", "public_note", "public_key",
         ]
 
     def get_lodgings(self, obj):
@@ -44,7 +45,7 @@ class TripRequestSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TripRequest
-        fields = ["trip_id", "title", "date_from", "date_to", "nights", "created_at"]
+        fields = ["trip_id", "title", "date_from", "date_to", "nights", "created_at", "is_public", "public_status"]
 
 
 class FeatureRequestSerializer(serializers.ModelSerializer):

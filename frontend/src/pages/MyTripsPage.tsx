@@ -54,7 +54,10 @@ export default function MyTripsPage() {
           {trips.map((trip) => (
             <li key={trip.trip_id}>
               <Link to={`/trip/${trip.trip_id}`} className="trip-list__item">
-                <span className="trip-list__title">{trip.title}</span>
+                <span className="trip-list__title">
+                  {trip.title}
+                  {trip.public_status === 'published' && <span className="badge badge--public trip-list__badge">公開中</span>}
+                </span>
                 <span className="trip-list__period">{formatPeriod(trip.date_from, trip.date_to)}</span>
                 <span className="trip-list__meta">
                   {trip.trip_id} ／ 作成 {formatDateTime(trip.created_at)}

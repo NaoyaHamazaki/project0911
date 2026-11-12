@@ -23,6 +23,15 @@ def generate_join_key() -> str:
     raise RuntimeError("意見募集キーの発番に失敗しました。時間をおいて再実行してください。")
 
 
+def generate_public_key() -> str:
+    """公開ページ用のキー。旅ID・意見募集キーとは別物にする。"""
+    for _ in range(10):
+        candidate = secrets.token_urlsafe(9)
+        if not TripRequest.objects.filter(public_key=candidate).exists():
+            return candidate
+    raise RuntimeError("公開キーの発番に失敗しました。時間をおいて再実行してください。")
+
+
 def generate_trip_id() -> str:
     """T + ランダム7文字（計8文字）の短い旅IDを発番する。例: T4K9XQP2
 
@@ -105,6 +114,16 @@ class TripRequest(models.Model):
     image_mood = models.CharField("画像の雰囲気", max_length=200, blank=True)
     # 参加者向け意見募集リンク(/join/<key>)のキー。旅IDとは別にして、参加者に編集権限を渡さない。
     join_key = models.CharField("意見募集キー", max_length=32, blank=True, db_index=True)
+
+    # 「他の人が作った旅」への公開。is_public は利用者の希望（STEP6・結果ページで切り替える）で、
+    # 実際に一覧に出るのは public_status が published のときだけ（publish.py で個人情報を伏せた公開版を作れたとき）。
+    is_public = models.BooleanField("公開する", default=False)
+    public_status = models.CharField("公開の状態", max_length=20, blank=True)
+    public_note = models.CharField("公開できなかった理由", max_length=300, blank=True)
+    # 公開ページ（/public/<key>）のキー。旅IDとは別にして、第三者に編集権限を渡さない。
+    public_key = models.CharField("公開キー", max_length=32, blank=True, db_index=True)
+    public_snapshot = models.JSONField("公開版の内容", default=dict, blank=True)
+    published_at = models.DateTimeField("公開日時", null=True, blank=True, db_index=True)
 
     prompt_text = models.TextField("生成プロンプト(行程表)", blank=True)
     image_prompt_text = models.TextField("生成プロンプト(画像生成用)", blank=True)

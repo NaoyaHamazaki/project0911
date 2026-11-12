@@ -148,6 +148,8 @@ FRONTEND_DIST_DIR = BASE_DIR.parent / "frontend" / "dist"
 if FRONTEND_DIST_DIR.exists():
     # index.html以外の静的ファイル（assets/以下など）をサイト直下（Vite側のパスと同じ）で配信する。
     WHITENOISE_ROOT = FRONTEND_DIST_DIR
+    # ホーム画面に追加したときのアプリ情報（manifest.webmanifest）を正しい種類で返す。
+    WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],

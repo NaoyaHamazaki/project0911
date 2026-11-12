@@ -11,6 +11,7 @@ import LodgingInputs from '../components/LodgingInputs'
 import LodgingSuggest from '../components/LodgingSuggest'
 import RepeatableInputs from '../components/RepeatableInputs'
 import SpotSuggestions from '../components/SpotSuggestions'
+import PublicTripSummary from '../components/PublicTripSummary'
 import TripSummaryCard from '../components/TripSummaryCard'
 import { AppError, BusinessError, api } from '../lib/api'
 import { nightsBetween } from '../lib/format'
@@ -29,6 +30,7 @@ import {
   type Contribution,
   type FieldError,
   type Options,
+  type PublicPreview,
   type TripForm,
 } from '../lib/types'
 
@@ -85,6 +87,9 @@ export default function CreatePage() {
   // 行先との整合性チェックで気になる点が出た場合、ユーザーが確認したものだけ true になる。
   const [consistencyWarnings, setConsistencyWarnings] = useState<string[]>([])
   const [confirmedWarnings, setConfirmedWarnings] = useState<Record<number, boolean>>({})
+  // 公開する場合の公開版（人名などを伏せたもの）のプレビュー。確認ページで見せる。
+  const [publicPreview, setPublicPreview] = useState<PublicPreview | null>(null)
+  const [publicPromptOpen, setPublicPromptOpen] = useState(false)
   // 意見募集リンク（ポップアップ）と、参加者から届いた追記
   const [joinOpen, setJoinOpen] = useState(false)
   const [joinUrl, setJoinUrl] = useState('')
@@ -237,6 +242,8 @@ export default function CreatePage() {
       const result = await api.validateTrip(form, editingTripId)
       setConsistencyWarnings(result.consistency_warnings)
       setConfirmedWarnings({})
+      setPublicPreview(result.public_preview ?? null)
+      setPublicPromptOpen(false)
       setStep(CONFIRM_STEP)
       scrollToTop()
     } catch (error) {
@@ -258,7 +265,8 @@ export default function CreatePage() {
       let tripId = editingTripId
       let savedNow: string | null = null
       if (!tripId) {
-        const trip = await api.createTrip(form, getDeviceKey())
+        // 入力途中のまま一覧に出さないよう、ここでは非公開で仮保存する（最後の保存で公開設定が反映される）。
+        const trip = await api.createTrip({ ...form, is_public: false }, getDeviceKey())
         tripId = trip.trip_id
         savedNow = trip.trip_id
         startEditing(tripId)
@@ -309,6 +317,7 @@ export default function CreatePage() {
     setContributions([])
     setConsistencyWarnings([])
     setConfirmedWarnings({})
+    setPublicPreview(null)
     setAttempted({})
     setStep(0)
   }
@@ -824,6 +833,32 @@ export default function CreatePage() {
                 />
               </div>
             )}
+
+            <div className="field public-setting">
+              <span className="field__label">他の人への公開</span>
+              <p className="field__hint">
+                公開すると「他の人が作った旅」に載り、旅づくりの参考にしてもらえます。
+                名前は「○○」に置き換え、連絡先や予約番号などは伏せ、日程は月と泊数だけにして載せます。
+                一緒に行く人からの意見は載せません。公開した旅を他の人が編集することはできず、あとから非公開にもできます。
+              </p>
+              <div className="choice-chips" role="radiogroup" aria-label="他の人への公開">
+                {[
+                  { value: true, label: '公開する' },
+                  { value: false, label: '公開しない' },
+                ].map((choice) => (
+                  <button
+                    key={choice.label}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.is_public === choice.value}
+                    className={form.is_public === choice.value ? 'chip chip--selected' : 'chip'}
+                    onClick={() => update('is_public', choice.value)}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
         )}
 
@@ -853,6 +888,34 @@ export default function CreatePage() {
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {form.is_public && (
+              <section className="card public-preview">
+                <h2 className="card__title">公開される内容</h2>
+                {!publicPreview ? (
+                  <p className="field__hint">公開版のプレビューを作れませんでした。保存時にもう一度作ります。</p>
+                ) : publicPreview.status === 'published' && publicPreview.snapshot ? (
+                  <>
+                    <p className="field__hint">
+                      「他の人が作った旅」には、次のように名前や連絡先などを伏せた内容が載ります（AIによる自動処理です）。
+                      伏せきれていない所があれば、戻って入力を直すか、STEP6で「公開しない」を選んでください。
+                    </p>
+                    <PublicTripSummary trip={publicPreview.snapshot} />
+                    <button
+                      type="button"
+                      className="button button--ghost button--small"
+                      aria-expanded={publicPromptOpen}
+                      onClick={() => setPublicPromptOpen((open) => !open)}
+                    >
+                      {publicPromptOpen ? '公開されるプロンプトを隠す' : '公開されるプロンプトを見る'}
+                    </button>
+                    {publicPromptOpen && <pre className="prompt-preview">{publicPreview.snapshot.prompt_text}</pre>}
+                  </>
+                ) : (
+                  <p className="public-preview__warning">{publicPreview.message}</p>
+                )}
               </section>
             )}
           </>

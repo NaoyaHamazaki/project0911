@@ -1,12 +1,15 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from django.conf import settings
 from django.db import DatabaseError
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import choices, consistency, spots, suggest
 from . import prompt as prompt_builder
-from . import providers, validators
+from . import providers, publish, validators
 from .lodging import describe_lodging, normalize_lodgings
 from .models import (
     AppUser,
@@ -16,6 +19,7 @@ from .models import (
     TripFeedback,
     TripRequest,
     generate_join_key,
+    generate_public_key,
     generate_trip_id,
 )
 from .serializers import (
@@ -164,6 +168,38 @@ def _image_prompt(cleaned: dict) -> str:
     return prompt_builder.build_image_prompt(cleaned) if cleaned.get("image_enabled") else ""
 
 
+def _apply_public(trip, cleaned: dict, wants_public: bool) -> None:
+    """公開の希望に合わせて公開版を作り直す（保存はしない）。
+
+    公開版は保存のたびに、その時点の入力から作り直す（伏せる処理は publish.py）。
+    作れなかった・公開に向かない内容だったときは、一覧に出さず理由を残す。
+    """
+    trip.is_public = wants_public
+    if not wants_public:
+        trip.public_status = ""
+        trip.public_note = ""
+        trip.public_snapshot = {}
+        trip.published_at = None
+        return
+    result = publish.build_public(cleaned)
+    trip.public_status = result["status"]
+    trip.public_note = result["message"][:300]
+    trip.public_snapshot = result["snapshot"] or {}
+    if result["status"] == publish.STATUS_PUBLISHED:
+        if not trip.public_key:
+            trip.public_key = generate_public_key()
+        if not trip.published_at:
+            trip.published_at = timezone.now()
+    else:
+        trip.published_at = None
+
+
+def _edit_forbidden(trip, device_key: str) -> bool:
+    """管理者設定で「作成端末との一致を必須にする」をONにしたときだけ、別端末からの変更を拒否する。"""
+    require_same_device = Setting.get_value(SETTING_EDIT_REQUIRES_SAME_DEVICE, "0") == "1"
+    return bool(require_same_device and trip.device_key and device_key != trip.device_key)
+
+
 class TripValidateView(APIView):
     """確認ページ用。保存せずにビジネスエラーの確認とプロンプトの試作を行う。"""
 
@@ -174,12 +210,19 @@ class TripValidateView(APIView):
         cleaned, errors = validators.normalize_and_validate(payload, is_new=is_new)
         if errors:
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
-        concerns = consistency.check_destination_consistency(cleaned)
+        # 公開する場合は、公開版（個人情報を伏せたもの）のプレビューも整合性チェックと並行して作る。
+        wants_public = bool(payload.get("is_public"))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            concerns_future = pool.submit(consistency.check_destination_consistency, cleaned)
+            public_future = pool.submit(publish.build_public, cleaned) if wants_public else None
+            concerns = concerns_future.result()
+            public_preview = public_future.result() if public_future else None
         return Response({
             "errors": [],
             "prompt_text": prompt_builder.build_prompt(cleaned),
             "image_prompt_text": _image_prompt(cleaned),
             "consistency_warnings": concerns,
+            "public_preview": public_preview,
         })
 
 
@@ -199,7 +242,9 @@ class TripListCreateView(APIView):
 
         cleaned["prompt_text"] = prompt_builder.build_prompt(cleaned)
         cleaned["image_prompt_text"] = _image_prompt(cleaned)
-        trip = TripRequest.objects.create(trip_id=generate_trip_id(), **cleaned)
+        trip = TripRequest(trip_id=generate_trip_id(), **cleaned)
+        _apply_public(trip, cleaned, bool((request.data or {}).get("is_public")))
+        trip.save()
         return Response(TripRequestSerializer(trip).data, status=status.HTTP_201_CREATED)
 
 
@@ -223,11 +268,9 @@ class TripDetailView(APIView):
             )
 
         payload = request.data or {}
-        device_key = str(payload.get("device_key") or "")
         # 既定では旅IDさえ知っていれば誰でも編集できる。管理者設定で「作成端末との一致を必須にする」を
         # ONにした場合だけ、作成時と異なる端末からの編集を拒否する。
-        require_same_device = Setting.get_value(SETTING_EDIT_REQUIRES_SAME_DEVICE, "0") == "1"
-        if require_same_device and trip.device_key and device_key != trip.device_key:
+        if _edit_forbidden(trip, str(payload.get("device_key") or "")):
             return Response(
                 {"detail": "この旅を編集する権限がありません（作成した端末と異なります）。"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -242,6 +285,9 @@ class TripDetailView(APIView):
         cleaned["image_prompt_text"] = _image_prompt(cleaned)
         for key, value in cleaned.items():
             setattr(trip, key, value)
+        # 画面が古く is_public を送ってこない場合は、今の公開設定のままにする。
+        wants_public = bool(payload["is_public"]) if "is_public" in payload else trip.is_public
+        _apply_public(trip, cleaned, wants_public)
         trip.save()
         return Response(TripRequestSerializer(trip).data)
 
@@ -252,6 +298,67 @@ def _find_trip(trip_id):
 
 def _not_found():
     return Response({"detail": "指定された旅IDのデータが見つかりませんでした。"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class TripVisibilityView(APIView):
+    """結果ページから公開・非公開を切り替える。公開にするときは、今の内容から公開版を作り直す。"""
+
+    def post(self, request, trip_id):
+        trip = _find_trip(trip_id)
+        if trip is None:
+            return _not_found()
+        payload = request.data or {}
+        if _edit_forbidden(trip, str(payload.get("device_key") or "")):
+            return Response(
+                {"detail": "この旅の公開設定を変える権限がありません（作成した端末と異なります）。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        cleaned = validators.normalize(TripRequestSerializer(trip).data)
+        _apply_public(trip, cleaned, bool(payload.get("is_public")))
+        trip.save(update_fields=[
+            "is_public", "public_status", "public_note", "public_key", "public_snapshot", "published_at", "updated_at",
+        ])
+        return Response(TripRequestSerializer(trip).data)
+
+
+PUBLIC_LIST_LIMIT = 20
+
+
+def _published():
+    return TripRequest.objects.filter(is_public=True, public_status=publish.STATUS_PUBLISHED).exclude(public_key="")
+
+
+class PublicTripListView(APIView):
+    """「他の人が作った旅」の一覧。公開版（個人情報を伏せたもの）だけを、新しい順に返す。"""
+
+    def get(self, request):
+        rows = _published().order_by("-published_at")[:PUBLIC_LIST_LIMIT]
+        results = []
+        for trip in rows:
+            snapshot = trip.public_snapshot or {}
+            results.append({
+                "public_key": trip.public_key,
+                "title": snapshot.get("title", ""),
+                "theme": snapshot.get("theme", ""),
+                "destination": snapshot.get("destination", ""),
+                "month_label": snapshot.get("month_label", ""),
+                "period_label": snapshot.get("period_label", ""),
+                "published_at": trip.published_at,
+            })
+        return Response({"results": results})
+
+
+class PublicTripDetailView(APIView):
+    """公開ページ（/public/<key>）。旅ID・意見募集リンク・参加者の意見は返さない。"""
+
+    def get(self, request, public_key):
+        trip = _published().filter(public_key=(public_key or "").strip()).first()
+        if trip is None:
+            return Response(
+                {"detail": "この旅は見つかりませんでした（非公開になった可能性があります）。"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({**(trip.public_snapshot or {}), "public_key": trip.public_key, "published_at": trip.published_at})
 
 
 class TripJoinKeyView(APIView):

@@ -11,6 +11,9 @@ import type {
   PlaceSuggestion,
   SpotSuggestionGroup,
   PromptSettingItem,
+  PublicPreview,
+  PublicTrip,
+  PublicTripSummary,
   TableInfo,
   Trip,
   TripForm,
@@ -93,7 +96,14 @@ export const api = {
 
   // 編集中の旅IDを渡すと、後から必須にした項目（出発地・行先）の空を許容する（既存データの再編集用）。
   validateTrip: (form: TripForm, editingTripId: string | null) =>
-    request<{ errors: FieldError[]; prompt_text: string; image_prompt_text: string; consistency_warnings: string[] }>(
+    request<{
+      errors: FieldError[]
+      prompt_text: string
+      image_prompt_text: string
+      consistency_warnings: string[]
+      /** 公開する場合だけ返る、公開版のプレビュー */
+      public_preview: PublicPreview | null
+    }>(
       '/api/trips/validate/',
       { method: 'POST', headers: aiHeaders(), body: JSON.stringify({ ...form, editing_trip_id: editingTripId ?? '' }) },
     ),
@@ -114,6 +124,18 @@ export const api = {
 
   myTrips: (deviceKey: string) =>
     request<{ results: TripSummary[] }>(`/api/trips/?device_key=${encodeURIComponent(deviceKey)}`),
+
+  // 結果ページから公開・非公開を切り替える（公開にするときは公開版を作り直すので数秒かかる）。
+  setVisibility: (tripId: string, isPublic: boolean) =>
+    request<Trip>(`/api/trips/${encodeURIComponent(tripId)}/visibility/`, {
+      method: 'POST',
+      headers: aiHeaders(),
+      body: JSON.stringify({ is_public: isPublic, device_key: getDeviceKey() }),
+    }),
+
+  publicTrips: () => request<{ results: PublicTripSummary[] }>('/api/public-trips/'),
+
+  publicTrip: (publicKey: string) => request<PublicTrip>(`/api/public-trips/${encodeURIComponent(publicKey)}/`),
 
   joinKey: (tripId: string) =>
     request<{ join_key: string }>(`/api/trips/${encodeURIComponent(tripId)}/join-key/`, { method: 'POST' }),

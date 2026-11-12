@@ -6,6 +6,8 @@ import CreatePage from './pages/CreatePage'
 import HomePage from './pages/HomePage'
 import JoinPage from './pages/JoinPage'
 import MyTripsPage from './pages/MyTripsPage'
+import PublicTripPage from './pages/PublicTripPage'
+import PublicTripsPage from './pages/PublicTripsPage'
 import RequestsPage from './pages/RequestsPage'
 import ResultPage from './pages/ResultPage'
 
@@ -34,6 +36,8 @@ export default function App() {
         <Route path="/trip/:tripId" element={<ResultPage />} />
         <Route path="/join/:joinKey" element={<JoinPage />} />
         <Route path="/my-trips" element={<MyTripsPage />} />
+        <Route path="/public" element={<PublicTripsPage />} />
+        <Route path="/public/:publicKey" element={<PublicTripPage />} />
         <Route path="/requests" element={<RequestsPage />} />
         <Route path="/admin-settings" element={<AdminSettingsPage />} />
         <Route path="*" element={<NotFoundPage />} />

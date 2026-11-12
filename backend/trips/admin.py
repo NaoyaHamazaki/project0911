@@ -6,7 +6,9 @@ from .models import AppUser, FeatureRequest, Setting, TripContribution, TripFeed
 
 @admin.register(TripRequest)
 class TripRequestAdmin(admin.ModelAdmin):
-    list_display = ("trip_id", "title", "date_from", "date_to", "created_at")
+    # 公開中の旅は、管理画面で「公開する」を外せば一覧から消える（不適切な公開への対応用）。
+    list_display = ("trip_id", "title", "date_from", "date_to", "created_at", "is_public", "public_status")
+    list_filter = ("is_public", "public_status")
     search_fields = ("trip_id", "title")
 
 
