@@ -2152,6 +2152,17 @@ img {
   display: block;
 }
 
+.hotel-card__tag {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hotel-card__nights {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .dest-suggest__highlights {
   margin: 0 0 4px;
   padding-left: 1.2em;

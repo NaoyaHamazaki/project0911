@@ -610,7 +610,7 @@ export default function CreatePage() {
                       maxNights={options.max_hotel_nights ?? 7}
                       onSelect={(index, name) => {
                         const list = [...form.lodgings]
-                        list[index] = { mode: 'name', value: name }
+                        list[index] = { mode: name.trim() ? 'name' : '', value: name }
                         update('lodgings', list)
                       }}
                     />

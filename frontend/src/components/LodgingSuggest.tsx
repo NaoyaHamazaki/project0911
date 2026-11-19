@@ -11,13 +11,14 @@ type Props = {
   dateTo: string
   lodgings: Lodging[]
   maxNights: number
-  /** 何泊目（0始まり）にこの宿を入れるか */
+  /** 何泊目（0始まり）にこの宿を入れるか。name が空なら、その泊の宿名を消す */
   onSelect: (index: number, name: string) => void
 }
 
 /**
- * STEP3の宿泊先のAI候補。泊ごとに5件ずつ、提案理由とGoogleマップ・公式サイトのリンクを付けて出す。
- * 「この泊にする」で、その泊の宿名欄に入る。もう一度押すと、表示中の宿を除いて出し直す。
+ * STEP3の宿泊先のAI候補。泊ごとに5件ずつ取得し、泊で区切らず1つのリストで出す。
+ * 各候補の「〇泊目」ボタンで、その泊の宿名欄に入る（選択中のボタンをもう一度押すと外す）。
+ * 「別の候補」で、表示中の宿を除いて出し直す。
  */
 export default function LodgingSuggest({
   theme,
@@ -35,6 +36,14 @@ export default function LodgingSuggest({
   const [fetched, setFetched] = useState(false)
 
   const hasDestination = Boolean(destination.trim())
+
+  // 泊ごとの区切りをやめて1つのリストにまとめる（同じ宿が複数の泊に出たら最初の1件だけ）。
+  const seen = new Set<string>()
+  const hotels = nights.flatMap((night) =>
+    night.hotels
+      .filter((hotel) => !seen.has(hotel.name) && Boolean(seen.add(hotel.name)))
+      .map((hotel) => ({ hotel, night: night.night, area: night.area })),
+  )
 
   const load = async () => {
     setLoading(true)
@@ -77,8 +86,8 @@ export default function LodgingSuggest({
       </div>
       <p className="field__hint">
         {hasDestination
-          ? `行先・日程・テーマをもとに、泊ごとに5件ずつ提案します。${
-              lodgings.length > maxNights ? `（${maxNights}泊目までの提案になります）` : ''
+          ? `行先・日程・テーマをもとに、泊ごとに5件ずつ提案します。各候補の「〇泊目」ボタンで、その泊に入れられます。${
+              lodgings.length > maxNights ? `（候補のエリアは${maxNights}泊目までをもとに選びます）` : ''
             }`
           : 'STEP2で行先を入力すると候補を出せます。'}
       </p>
@@ -89,58 +98,55 @@ export default function LodgingSuggest({
         </div>
       )}
       {error && !loading && <p className="spot-suggest__error">{error}</p>}
-      {!loading &&
-        nights.map((night) => {
-          const index = night.night - 1
-          const currentName = lodgings[index]?.value.trim() ?? ''
-          return (
-            <section className="spot-suggest__group" key={night.night}>
-              <h3 className="spot-suggest__area">
-                {night.night}泊目
-                {night.area && <span className="spot-suggest__count">{night.area}</span>}
-              </h3>
-              {night.hotels.length === 0 ? (
-                <p className="field__hint">この泊の候補は見つかりませんでした。</p>
-              ) : (
-                <ul className="spot-suggest__list hotel-suggest__list">
-                  {night.hotels.map((hotel) => (
-                    <li className="spot-card hotel-card" key={hotel.name}>
-                      <p className="spot-card__name">{hotel.name}</p>
-                      {hotel.reason && <p className="spot-card__summary">{hotel.reason}</p>}
-                      {hotel.address && <p className="spot-card__for">{hotel.address}</p>}
-                      <p className="spot-card__source">
-                        <a href={hotel.maps_url} target="_blank" rel="noreferrer">
-                          Googleマップ
-                        </a>
-                        {hotel.website && (
-                          <>
-                            {' ／ '}
-                            <a href={hotel.website} target="_blank" rel="noreferrer">
-                              公式サイト
-                            </a>
-                          </>
-                        )}
-                      </p>
-                      <div className="spot-card__actions">
-                        {currentName === hotel.name ? (
-                          <span className="spot-card__added">{night.night}泊目に設定済み</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="button button--primary button--small"
-                            onClick={() => onSelect(index, hotel.name)}
-                          >
-                            この泊にする
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )
-        })}
+      {!loading && hotels.length > 0 && (
+        <ul className="spot-suggest__list hotel-suggest__list">
+          {hotels.map(({ hotel, night, area }) => (
+            <li className="spot-card hotel-card" key={hotel.name}>
+              <p className="spot-card__name">{hotel.name}</p>
+              <p className="hotel-card__tag">
+                {night}泊目向け{area ? `・${area}` : ''}
+              </p>
+              {hotel.reason && <p className="spot-card__summary">{hotel.reason}</p>}
+              {hotel.address && <p className="spot-card__for">{hotel.address}</p>}
+              <p className="spot-card__source">
+                <a href={hotel.maps_url} target="_blank" rel="noreferrer">
+                  Googleマップ
+                </a>
+                {hotel.website && (
+                  <>
+                    {' ／ '}
+                    <a href={hotel.website} target="_blank" rel="noreferrer">
+                      公式サイト
+                    </a>
+                  </>
+                )}
+              </p>
+              <div className="spot-card__actions hotel-card__nights">
+                {lodgings.map((lodging, index) => {
+                  const selected = lodging.value.trim() === hotel.name
+                  return (
+                    <button
+                      type="button"
+                      key={index}
+                      className={
+                        selected
+                          ? 'button button--primary button--small hotel-card__night'
+                          : 'button button--ghost button--small hotel-card__night'
+                      }
+                      aria-pressed={selected}
+                      title={selected ? `${index + 1}泊目から外す` : `${index + 1}泊目に入れる`}
+                      onClick={() => onSelect(index, selected ? '' : hotel.name)}
+                    >
+                      {selected ? '✓ ' : ''}
+                      {index + 1}泊目
+                    </button>
+                  )
+                })}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
